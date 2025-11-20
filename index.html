@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lets Connect — Secure Chat</title>
+  <link rel="shortcut icon" type="image/x-icon" href="icon.png">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root">
+
+    <!-- AUTH (visible initially) -->
+    <section id="authSection" class="screen auth-screen">
+      <div class="auth-card">
+        <div class="brand">
+          <div class="logo">LC</div>
+          <div class="brand-text">
+            <h1>Lets Connect</h1>
+            <p class="muted">Secure messaging • Calls • Private storage</p>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button id="tabSignIn" class="tab active" role="tab" aria-selected="true" type="button">Sign In</button>
+          <button id="tabSignUp" class="tab" role="tab" type="button">Sign Up</button>
+        </div>
+
+        <form id="formSignIn" class="form" onsubmit="return false" novalidate>
+          <input id="signinEmail" type="email" placeholder="Email" autocomplete="username" required />
+          <input id="signinPass" type="password" placeholder="Password" autocomplete="current-password" required />
+          <div class="row gap">
+            <button id="btnSignIn" class="btn primary" type="button">Sign In</button>
+            <button id="btnSSO" class="btn ghost" type="button">Sign in with Google</button>
+          </div>
+        </form>
+
+        <form id="formSignUp" class="form hidden" onsubmit="return false" novalidate>
+          <input id="signupEmail" type="email" placeholder="Email" autocomplete="email" required />
+          <input id="signupPass" type="password" placeholder="Password (min 6)" autocomplete="new-password" required />
+          <div class="row gap">
+            <button id="btnSignUp" class="btn primary" type="button">Create account</button>
+            <button id="btnDemo" class="btn ghost" type="button">Try demo</button>
+          </div>
+          <p class="muted small">After sign up you'll set your profile (name, phone, avatar).</p>
+        </form>
+
+      </div>
+    </section>
+
+    <!-- PROFILE SETUP (hidden until needed) -->
+    <section id="profileSection" class="screen hidden">
+      <div class="profile-card">
+        <h2>Set up your account</h2>
+        <div class="avatar-preview" id="avatarPreview">U</div>
+        <label class="file-label">Upload avatar <input id="profileAvatar" type="file" accept="image/*" /></label>
+
+        <input id="profileName" placeholder="Display name" />
+        <input id="profilePhone" placeholder="Phone number (optional)" />
+        <div class="row gap">
+          <button id="btnSaveProfile" class="btn primary" type="button">Save profile</button>
+          <button id="btnSkipProfile" class="btn ghost" type="button">Skip</button>
+        </div>
+        <p class="muted small">You can edit this later in Settings.</p>
+      </div>
+    </section>
+
+    <!-- MAIN APP (hidden until logged in + profile done) -->
+    <section id="appSection" class="screen hidden app-screen" aria-hidden="true">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div id="meAvatar" class="avatar-lg">U</div>
+          <div class="me-meta">
+            <div id="meName">You</div>
+            <div id="mePhone" class="muted small">—</div>
+          </div>
+          <button id="btnOpenProfile" class="icon small" title="Profile" type="button">⚙️</button>
+        </div>
+
+        <div class="controls">
+          <input id="contactSearch" placeholder="Search contacts" />
+          <div class="row gap small-2">
+            <button id="btnAddContactMain" class="btn-sm" type="button">+ Contact</button>
+            <button id="btnRefresh" class="btn-sm ghost" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div id="contactsList" class="contacts" aria-live="polite"></div>
+      </aside>
+
+      <main class="chat" role="main">
+        <div class="chat-header">
+          <div class="chat-left">
+            <div id="chatAvatar" class="avatar-md">U</div>
+            <div>
+              <div id="chatTitle">Select contact</div>
+              <div id="chatSubtitle" class="muted small">—</div>
+            </div>
+          </div>
+          <div class="chat-actions">
+            <button id="btnVoiceCall" class="icon" title="Voice call" type="button">🔊</button>
+            <button id="btnVideoCall" class="icon" title="Video call" type="button">🎥</button>
+            <button id="btnClearChat" class="icon" title="Clear conversation" type="button">🗑</button>
+          </div>
+        </div>
+
+        <div id="messages" class="messages" role="log" aria-live="polite"></div>
+
+        <div class="composer">
+          <button id="btnEmoji" class="icon" type="button">😊</button>
+          <input id="inputMessage" placeholder="Write a message..." autocomplete="off" />
+          <input id="attachFile" type="file" style="display:none" multiple />
+          <button id="btnAttachMain" class="icon" type="button">📎</button>
+          <button id="btnSendMain" class="btn primary" type="button">Send</button>
+        </div>
+      </main>
+    </section>
+
+    <!-- Modal Add Contact -->
+    <div id="modalAddContact" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h3>Add Contact</h3>
+        <input id="addContactName" placeholder="Display name (optional)" />
+        <input id="addContactUid" placeholder="Paste user UID or phone" />
+        <div class="row gap right">
+          <button id="addContactCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="addContactSave" class="btn" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Supabase init (client anon) -->
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+    const SUPABASE_URL = 'https://ojspvwkoetgbgwycehpz.supabase.co'
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qc3B2d2tvZXRnYmd3eWNlaHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MTI0MzQsImV4cCI6MjA3OTE4ODQzNH0.AXPZu09ka2n3LlYQI4QDmToGqAcvuzjdx2po0b0ZI84'
+    window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  </script>
+
+  <!-- Defensive: prevent native form submit reloads -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => e.preventDefault()));
+    });
+  </script>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+:root{
+  /* --- WHATSAPP DARK THEME COLORS --- */
+  --whatsapp-green: #00B3A1; /* Primary accent for buttons/branding (Slightly darker for better contrast) */
+  --whatsapp-green-dark: #005C4B; /* Darker green for logos/active states */
+  --bg: #0C1317; /* Darkest background (outer screen/body) */
+  --card: #111B21; /* Main panel/card background (Slightly lighter than sidebar for distinction) */
+  --sidebar: #111B21; /* Sidebar/Contacts List background (Same as card for unified panel look) */
+  --muted: #8696A0; /* Muted text (time, subtitles) */
+  --text-primary: #E9EDEF; /* General white text */
+  --received-msg: #202C33; /* Background for received message bubble */
+  --sent-msg: #005C4B; /* Background for sent message bubble */
+  --input-bg: #2A3942; /* Composer/Input background */
+  --glass: rgba(255,255,255,0.08); /* Subtle internal divider/border */
+  --border-color: rgba(255, 255, 255, 0.15); /* Stronger border for input focus */
+
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+}
+*{box-sizing:border-box}
+
+/* --- CUSTOM SCROLLBAR STYLING (Webkit) --- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--sidebar); }
+::-webkit-scrollbar-thumb { background: #506173; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #6b7d90; }
+
+/* Base styles: Ensure full viewport height and main background color */
+html,body{
+  height:100%;margin:0;
+  background:var(--bg);
+  color:var(--text-primary);
+  /* Use a subtle background pattern mimic for chat applications */
+  background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23121b22' fill-opacity='0.2' fill-rule='evenodd'%3E%3Cpath d='M3 0h3v3H3V0zM0 3h3v3H0V3z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+#root{
+  min-height:100vh;
+  height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+}
+
+/* ----------------------- GENERIC UTILITIES ----------------------- */
+.screen{
+  width:100%; max-width:1100px;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px; 
+  overflow: hidden; /* Changed to hidden to prevent screen level scrollbar */
+}
+.hidden{display:none}
+.row{display:flex;align-items:center}
+.gap{gap:10px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+/* ----------------------- BUTTONS & FORMS ----------------------- */
+.form input, .profile-card input, .controls input{
+  padding:12px;border-radius:10px;
+  border:1px solid transparent; /* Added subtle border for focus transition */
+  background:var(--input-bg);
+  color:inherit;
+  width:100%;
+  transition: border-color 0.2s, background 0.2s;
+}
+.form input:focus, .profile-card input:focus, .controls input:focus{
+    border-color: var(--whatsapp-green); /* Accent border on focus */
+    outline: none;
+}
+
+.btn{
+  padding:10px 12px;border-radius:10px;border:0;cursor:pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+.btn.primary{
+  background:var(--whatsapp-green);
+  color:var(--bg); /* Dark text on bright green */
+  font-weight:700;
+}
+.btn.primary:hover{ background: #00CCAA; }
+
+.btn.ghost{
+  background:transparent;
+  border:1px solid var(--glass); /* Used glass variable for border */
+  color:var(--text-primary);
+}
+.btn.ghost:hover{ background: rgba(255,255,255,0.05); }
+
+.btn-sm{
+  padding:8px 10px;border-radius:8px;
+  background:transparent;
+  border:1px solid var(--input-bg);
+  font-size:13px;
+  color:var(--text-primary);
+}
+
+/* ----------------------- AUTH & PROFILE CARDS ----------------------- */
+.auth-screen, .profile-card { padding: 0; }
+.auth-card, .profile-card{
+  width:100%; 
+  max-width:420px;
+  background:var(--card);
+  padding:30px; /* Increased padding for more breathing room */
+  border-radius:14px;
+  box-shadow:0 15px 40px rgba(0,0,0,0.6); /* Deeper shadow */
+  text-align:center;
+}
+.auth-card{text-align:left;}
+
+.brand{display:flex;gap:12px;align-items:center;margin-bottom:20px} /* Increased margin */
+.logo{
+  width:54px;height:54px;border-radius:12px;
+  /* Fixed gradient to use defined variables */
+  background:linear-gradient(135deg,var(--whatsapp-green), var(--whatsapp-green-dark)); 
+  display:flex;align-items:center;justify-content:center;font-weight:800;
+  font-size: 24px;
+  color: var(--bg);
+}
+.brand-text h1{margin:0;font-size:26px} /* Increased heading size */
+.brand-text p{margin:0;font-size:14px;color:var(--muted)}
+
+.tabs{display:flex;margin:15px 0 25px 0} /* Increased vertical margin */
+.tab{
+  flex:1;padding:10px;border-radius:10px;background:transparent;
+  border:1px solid var(--glass); 
+  cursor:pointer;
+  transition: all 0.2s;
+}
+.tab.active{
+  background:var(--whatsapp-green-dark); /* Using dark green for active tab background */
+  font-weight:600;
+  border-color: var(--whatsapp-green);
+}
+.form{display:flex;flex-direction:column;gap:15px} /* Increased gap in form */
+
+/* Profile Setup Specifics */
+.avatar-preview{
+  width:100px;height:100px;border-radius:50%; /* Slightly larger avatar */
+  background:var(--input-bg);
+  margin:10px auto 20px auto;
+  font-size:48px;
+  color: var(--muted);
+  display:flex;align-items:center;justify-content:center
+}
+.file-label{
+  display:inline-block;padding:8px 15px;
+  background:var(--glass);
+  border-radius:10px;margin-bottom:15px;cursor:pointer;font-size:14px;
+  border: 1px solid var(--glass);
+}
+.file-label input{display:none;}
+.profile-card input{ margin-bottom:15px; }
+
+/* ----------------------- APP LAYOUT ----------------------- */
+.app-screen{
+  display:flex;gap:0; /* Removed gap, rely on border/shadow for separation */
+  max-width:1200px; /* Wider desktop view */
+  padding: 0;
+  height: 100vh;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8); /* Stronger overall app container shadow */
+  overflow: hidden;
+}
+
+/* SIDEBAR (CONTACTS LIST) */
+.sidebar{
+  width:350px; 
+  background:var(--sidebar);
+  padding:15px;
+  border-right: 1px solid rgba(255,255,255,0.05); /* Clear separation line */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.sidebar-top{
+  display:flex;align-items:center;gap:15px;
+  padding-bottom:15px;
+  margin-bottom: 5px;
+  border-bottom:1px solid var(--glass);
+}
+.avatar-lg{
+  width:50px;height:50px;border-radius:50%;
+  background:var(--whatsapp-green-dark);
+  display:flex;align-items:center;justify-content:center;font-weight:700;
+  color: var(--text-primary);
+}
+.me-meta{flex:1}
+.controls{margin:15px 0}
+.controls .row{margin-top: 10px;}
+.contacts{
+  flex: 1;
+  overflow-y:auto;
+  margin-top:10px;
+}
+.contact{
+  display:flex;align-items:center;gap:15px;
+  padding:12px; /* Increased click target area */
+  border-radius:10px;cursor:pointer;
+  transition: background 0.1s;
+}
+.contact:hover{background:rgba(255,255,255,0.05)}
+.contact.active{
+  background:var(--input-bg); /* Use input-bg for a slightly darker active state */
+  box-shadow: inset 2px 0 0 0 var(--whatsapp-green); /* Subtle green bar indicator */
+}
+.contact .avatar{
+  width:44px;height:44px;border-radius:50%;
+  background:var(--whatsapp-green-dark);
+  display:flex;align-items:center;justify-content:center
+}
+
+/* CHAT AREA */
+.chat{
+  flex:1;display:flex;flex-direction:column;
+  background:var(--bg); 
+  padding:0; /* Adjust padding below for header/messages/composer */
+  height: 100%;
+}
+.chat-header{
+  display:flex;justify-content:space-between;align-items:center;
+  background: var(--sidebar); /* Match sidebar background */
+  border-bottom:1px solid var(--glass);
+  padding: 15px; 
+  flex-shrink: 0;
+}
+.chat-left{display:flex;align-items:center;gap:12px}
+.avatar-md{
+  width:40px;height:40px;border-radius:50%;
+  background:var(--whatsapp-green-dark);
+  display:flex;align-items:center;justify-content:center
+}
+.messages{
+  flex:1;
+  overflow-y:auto;
+  padding:16px;
+  display:flex;flex-direction:column;gap:8px; /* Tighter gap */
+}
+/* RECEIVED MESSAGE */
+.msg{
+  max-width:70%;padding:10px 12px;
+  border-radius:10px 10px 10px 2px;
+  background:var(--received-msg);
+  color:var(--text-primary);
+  box-shadow:0 1px 0.5px rgba(0,0,0,0.1);
+}
+/* SENT MESSAGE (User enters and types) */
+.msg.me{
+  align-self:flex-end;
+  background:var(--sent-msg);
+  color:white;
+  border-radius:10px 10px 2px 10px;
+}
+.msg .time{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:5px;
+  display: block;
+  text-align: right;
+  /* Improved contrast for sent message time */
+  color: rgba(255, 255, 255, 0.7); 
+}
+
+/* COMPOSER */
+.composer{
+    display:flex;gap:10px;align-items:center;
+    padding: 12px 15px; /* Added horizontal padding to match header */
+    flex-shrink: 0;
+    background: var(--sidebar); /* Match sidebar/header background */
+}
+.composer input{
+  flex:1;padding:12px 18px; /* Slightly wider input padding */
+  border-radius:24px; /* Perfect pill shape */
+  border:0;
+  background:var(--input-bg);
+}
+.icon{
+  background:transparent;border:0;
+  padding:10px; /* Larger touch target */
+  border-radius:50%;
+  cursor:pointer;font-size:20px;
+  color: var(--muted);
+  transition: color 0.2s, background 0.2s;
+}
+.icon:hover { color: var(--whatsapp-green); background: rgba(0, 0, 0, 0.2); }
+
+/* attachments styling */
+.file-thumb{max-width:220px;border-radius:8px;margin-top:8px;display:block}
+.doc-thumb{padding:10px;border-radius:8px;background:var(--glass);margin-top:8px;display:inline-block; border: 1px solid rgba(255, 255, 255, 0.1);}
+
+/* ----------------------- MODAL ----------------------- */
+.modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.85);z-index:200} /* Darker overlay */
+.modal-card{width:90%; max-width:420px;background:var(--card);padding:30px;border-radius:12px}
+.modal.hidden{display:none}
+
+
+/* ----------------------- RESPONSIVENESS (Mobile/WebView) ----------------------- */
+@media (max-width:900px){
+  /* Ensure a true full-screen experience on mobile */
+  #root, .app-screen, .sidebar, .chat { height: 100vh; border-radius: 0; }
+  .screen{padding:0;}
+  .auth-card, .profile-card { border-radius: 0; box-shadow: none; }
+  
+  .app-screen{flex-direction:column; gap:0;}
+  
+  /* Mobile View: Sidebar (Contacts List) and Chat should be full screen */
+  .sidebar{width:100%; order:2; border-radius: 0; border-right: none;}
+  .chat{width:100%; order:1; border-radius: 0;}
+}
