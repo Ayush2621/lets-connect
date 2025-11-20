@@ -2,11 +2,11 @@
   "name": "lets-connect-chat",
   "version": "1.0.0",
   "description": "Secure Chat Application using Supabase",
-  "main": "api/signed-url.js",
+  "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2"
+    "@supabase/supabase-js": "^2.40.0"
   },
   "engines": {
-    "node": "20.x"
+    "node": "18.x"
   }
 }
