@@ -81,8 +81,27 @@ document.addEventListener('DOMContentLoaded', () => {
   mobileBackButton.innerHTML = '&#x2190;'; // Left Arrow icon
 
   /* helpers */
-  function show(el) { if (el) { el.classList.remove('hidden'); el.style.display = ''; } }
-  function hide(el) { if (el) { el.classList.add('hidden'); el.style.display = 'none'; } }
+function show(el) {
+  if (!el) return;
+
+  el.classList.remove('hidden');
+  el.style.display = '';
+
+  // Important fix for your issue
+  el.removeAttribute('aria-hidden');
+}
+
+function hide(el) {
+  if (!el) return;
+
+  el.classList.add('hidden');
+  el.style.display = 'none';
+
+  // Important fix for your issue
+  el.setAttribute('aria-hidden', 'true');
+}
+
+
   function showOnly(key) {
     const map = { auth: authSection, profile: profileSection, app: appSection };
     Object.values(map).forEach(hide);
