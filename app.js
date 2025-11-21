@@ -21,10 +21,16 @@ if (!supabase) {
 // Optional: add TURN servers here if needed (WhatsApp uses TURN for NAT traversal in some networks).
 // Example: { urls: 'turn:yourturnserver:3478', username: 'user', credential: 'pass' }
 const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' }
-  // Add TURN server entries here if you have them:
-  // { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' }
+  { urls: 'stun:stun.l.google.com:19302' },
+
+  // ✅ Your TURN server (required for stable calls)
+  {
+    urls: 'turn:turn.example.com:3478',
+    username: 'd705dbea1fdf38d37acf4c14',
+    credential: 'SOamfiXKs3H4hPNB'
+  }
 ];
+
 
 // App state
 let currentUser = null;        // Supabase auth user object
@@ -838,6 +844,6 @@ window.startCallAction = startCallAction;
 window.endCall = endCall;
 window.subscribeToGlobalEvents = subscribeToGlobalEvents;
 window.cleanupCallResources = cleanupCallResources;
-
 console.log('app.js loaded —  calling enabled (incoming popup, outgoing UI, ringtone).');
+
 
