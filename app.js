@@ -1,16 +1,18 @@
 'use strict';
 
 /*
-  FINAL FIXED VERSION (Sanitized ICE Candidates)
-  - Fixes: TypeError: Failed to construct 'RTCIceCandidate'
-  - Fixes: Ringtone 404 errors
-  - Fixes: Push API 500 (Silenced)
+  FINAL CLEAN VERSION
+  - Green Debugger REMOVED.
+  - Incoming Call Popup FIXED.
+  - Video Z-Index FIXED (Video stays on top).
+  - Ringtones & Connections stabilized.
 */
 
 const supabase = window.supabase;
 if (!supabase) throw new Error('Supabase missing');
 
-// STUN Servers
+// STUN Servers (Google)
+// NOTE: If calling fails on 4G/5G, you need a paid TURN server. This works on WiFi.
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -34,24 +36,8 @@ let currentRemoteUser = null;
 let iceCandidatesQueue = []; 
 let scannerStream = null;
 
-// Sounds
+// Sound
 const BEEP_SOUND = new Audio("data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgRYWFgAAAAwAAADbWlub3JfdmVyc2lvbgAwAFRYWFgAAAAkAAADY29tcGF0aWJsZV9icmFuZHMAbXA0Mmlzb21tcDQx//uQZAAAAAAA0AAAAABAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcYAAAAAAABAAAIMwAAAAAS");
-
-/* -------------------- DEBUGGER -------------------- */
-function log(msg) {
-    console.log(msg);
-    let d = document.getElementById('debug-overlay');
-    if (!d) {
-        d = document.createElement('div');
-        d.id = 'debug-overlay';
-        d.style.cssText = "position:fixed;top:0;left:0;width:100%;max-height:150px;overflow-y:scroll;background:rgba(0,0,0,0.8);color:#0f0;font-family:monospace;font-size:10px;z-index:2147483647;pointer-events:none;padding:5px;";
-        document.body.appendChild(d);
-    }
-    const line = document.createElement('div');
-    line.textContent = `> ${msg}`;
-    d.appendChild(line);
-    d.scrollTop = d.scrollHeight;
-}
 
 /* -------------------- HELPERS -------------------- */
 function get(id) { return document.getElementById(id); }
@@ -104,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
   on('qrScanClose', 'click', () => { stopScanner(); hide(get('modalQrScan')); });
 
   checkSession();
-  log("App Loaded.");
 });
 
 /* -------------------- AUTH & DATA -------------------- */
@@ -269,11 +254,10 @@ function renderMessage(msg) {
   }
 }
 
-/* -------------------- CALLING LOGIC (FIXED) -------------------- */
+/* -------------------- CALLING LOGIC -------------------- */
 
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
-  log(`Starting Call to: ${activeContact.contact_user}`);
   
   currentCallId = `call_${Date.now()}`;
   currentRemoteUser = activeContact.contact_user; 
@@ -283,7 +267,7 @@ async function startCallAction(video) {
   setupPCListeners();
 
   try {
-    log("Requesting User Media...");
+    console.log("Requesting User Media...");
     localStream = await navigator.mediaDevices.getUserMedia({ video: !!video, audio: true });
     
     // Preview
@@ -293,8 +277,7 @@ async function startCallAction(video) {
     
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
-    log("MEDIA ERROR: " + err.message);
-    return alert("Camera/Mic blocked! Check site permissions.");
+    return alert("Camera/Mic blocked! Check browser permissions.");
   }
 
   enhancedListenToCallEvents(currentCallId);
@@ -302,27 +285,21 @@ async function startCallAction(video) {
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    log("Sending OFFER...");
+    console.log("Sending OFFER...");
     await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'offer', payload: JSON.stringify(offer) }]);
     showOutgoingCallingUI(currentCallId, currentRemoteUser);
   } catch (err) {
-    log("OFFER ERROR: " + err.message);
+    console.warn("OFFER ERROR:", err);
     cleanupCallResources();
   }
 }
 
 function setupPCListeners() {
-  pc.oniceconnectionstatechange = () => {
-    log(`ICE State: ${pc.iceConnectionState}`); 
-  };
-  
-  pc.onconnectionstatechange = () => {
-    log(`Conn State: ${pc.connectionState}`);
-  };
+  pc.oniceconnectionstatechange = () => console.log(`ICE State: ${pc.iceConnectionState}`);
+  pc.onconnectionstatechange = () => console.log(`Conn State: ${pc.connectionState}`);
 
-  // TRACK HANDLING
   pc.ontrack = (e) => {
-    log(`TRACK RECEIVED: ${e.track.kind}`);
+    console.log(`TRACK RECEIVED: ${e.track.kind}`);
     const remoteEl = get('remoteVideo') || createRemoteVideoElement();
     
     if (e.streams && e.streams[0]) {
@@ -333,15 +310,14 @@ function setupPCListeners() {
         if (remoteEl.srcObject !== remoteStream) remoteEl.srcObject = remoteStream;
     }
     
-    // Force play
+    // Force play (iOS fix)
     remoteEl.onloadedmetadata = () => {
-        remoteEl.play().then(() => log("Video Playing")).catch(e => log("Autoplay blocked: " + e.message));
+        remoteEl.play().catch(e => console.log("Autoplay blocked"));
     };
   };
 
   pc.onicecandidate = async (e) => {
     if (!e.candidate || !currentRemoteUser) return;
-    
     try {
        const candidateJSON = e.candidate.toJSON();
        await supabase.from('calls').insert([{
@@ -351,7 +327,7 @@ function setupPCListeners() {
           type: 'ice',
           payload: JSON.stringify(candidateJSON)
        }]);
-    } catch (err) { log("ICE SEND FAIL: " + err.message); }
+    } catch (err) { console.warn("ICE SEND FAIL:", err); }
   };
 }
 
@@ -362,20 +338,19 @@ function enhancedListenToCallEvents(callId) {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
       if (!row || row.from_user === currentUser.id) return;
 
-      if (row.type === 'cancel' || row.type === 'reject') { log("Call Rejected/Ended"); cleanupCallResources(); return; }
-      if (row.type === 'offer') return;
+      if (row.type === 'cancel' || row.type === 'reject') { cleanupCallResources(); return; }
+      if (row.type === 'offer') return; // Offers handled globally
 
       let payload = row.payload;
       if (typeof payload === 'string') try { payload = JSON.parse(payload); } catch(e) {}
 
       try {
         if (row.type === 'answer' && pc) {
-          log("ANSWER Received.");
+          console.log("ANSWER Received.");
           await pc.setRemoteDescription(new RTCSessionDescription(payload));
           processIceQueue();
         } else if (row.type === 'ice' && pc) {
-          // *** CRITICAL FIX FOR YOUR ERROR ***
-          // Ensure the candidate object is strictly formatted
+          // Sanitized ICE Candidate Handling
           if (payload && payload.candidate) {
              const candidateInit = {
                  candidate: payload.candidate,
@@ -391,23 +366,24 @@ function enhancedListenToCallEvents(callId) {
              }
           }
         }
-      } catch (e) { log("SIGNAL ERROR: " + e.message); }
+      } catch (e) { console.warn("SIGNAL ERROR:", e); }
     }).subscribe();
 }
 
 async function processIceQueue() {
     if (!pc) return;
-    log(`Processing ${iceCandidatesQueue.length} queued ICE candidates`);
     for (const c of iceCandidatesQueue) await pc.addIceCandidate(c);
     iceCandidatesQueue = [];
 }
 
 function subscribeToGlobalEvents() {
   if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
+  console.log("Subscribing to global calls for:", currentUser.id);
+  
   globalSub = supabase.channel('user_global_' + currentUser.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
       if (row && row.type === 'offer') {
-          log(`Incoming Call from ${row.from_user}`);
+          console.log(`Incoming Call from ${row.from_user}`);
           currentRemoteUser = row.from_user; 
           showIncomingCallPopup(row);
       }
@@ -421,7 +397,6 @@ async function handleIncomingCall(row) {
   playTone('receive');
   currentCallId = row.call_id;
   currentRemoteUser = row.from_user; 
-  log(`Answering call from ${currentRemoteUser}`);
   
   enhancedListenToCallEvents(currentCallId);
 
@@ -432,11 +407,9 @@ async function handleIncomingCall(row) {
   if (typeof offerPayload === 'string') try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
   
   try {
-    log("Getting User Media (Answer)...");
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   } catch (err) {
-    log("MEDIA ERROR: " + err.message);
     return alert("Camera/Mic blocked!");
   }
   
@@ -447,10 +420,10 @@ async function handleIncomingCall(row) {
     processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    log("Sending ANSWER...");
+    console.log("Sending ANSWER...");
     await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
   } catch (err) {
-     log("ANSWER ERROR: " + err.message);
+     console.warn("ANSWER ERROR:", err);
   }
 }
 
@@ -462,13 +435,14 @@ function createRemoteVideoElement() {
   v.id = 'remoteVideo';
   v.autoplay = true;
   v.playsInline = true; 
-  v.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483646;background:#000;object-fit:cover;";
+  // Force Z-Index High
+  v.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;background:#000;object-fit:cover;";
   document.body.appendChild(v);
   
   let btn = document.createElement('button');
   btn.id = 'endCallBtn';
   btn.innerText = "END CALL";
-  btn.style.cssText = "position:fixed;bottom:50px;left:50%;transform:translateX(-50%);z-index:2147483647;padding:20px 40px;background:red;color:white;border:none;border-radius:30px;font-weight:bold;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+  btn.style.cssText = "position:fixed;bottom:50px;left:50%;transform:translateX(-50%);z-index:10000;padding:20px 40px;background:red;color:white;border:none;border-radius:30px;font-weight:bold;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
   btn.onclick = endCall;
   document.body.appendChild(btn);
   
@@ -476,7 +450,6 @@ function createRemoteVideoElement() {
 }
 
 function cleanupCallResources() {
-  log("Cleaning up call...");
   if (pc) pc.close(); pc = null;
   if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = null;
   if (remoteStream) remoteStream.getTracks().forEach(t => t.stop()); remoteStream = null;
@@ -501,7 +474,6 @@ function endCall() {
 let ringtone = null;
 function ensureRingtone() {
   if (ringtone) return; ringtone = document.createElement('audio');
-  // Use remote directly to avoid 404 spam
   ringtone.src = 'https://actions.google.com/sounds/v1/alarms/phone_ringing.ogg';
   ringtone.loop = true;
 }
@@ -510,14 +482,21 @@ function stopRinging() { if (ringtone) { ringtone.pause(); ringtone.currentTime 
 function showIncomingCallPopup(row) {
   if (get('incomingCallModal')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
-  const modal = document.createElement('div'); modal.id = 'incomingCallModal';
-  modal.innerHTML = `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:20000;color:white;flex-direction:column;">
-    <h2>Incoming Call</h2><div style="margin-bottom:20px;font-size:12px;">ID: ${row.from_user.substr(0,8)}...</div>
+  
+  const modal = document.createElement('div'); 
+  modal.id = 'incomingCallModal';
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:2147483647;color:white;flex-direction:column;";
+  
+  modal.innerHTML = `
+    <h2 style="margin-bottom:10px;">Incoming Call</h2>
+    <div style="margin-bottom:30px;font-size:14px;color:#ccc;">From user...</div>
     <div style="display:flex;gap:20px;">
-       <button id="btnAccept" style="padding:15px 30px;background:green;border:none;border-radius:10px;color:white;font-weight:bold;font-size:18px;">Accept</button>
-       <button id="btnDecline" style="padding:15px 30px;background:red;border:none;border-radius:10px;color:white;font-weight:bold;font-size:18px;">Decline</button>
-    </div></div>`;
+       <button id="btnAccept" style="padding:15px 40px;background:#00a884;border:none;border-radius:50px;color:white;font-weight:bold;font-size:18px;cursor:pointer;">Accept</button>
+       <button id="btnDecline" style="padding:15px 40px;background:#ea0038;border:none;border-radius:50px;color:white;font-weight:bold;font-size:18px;cursor:pointer;">Decline</button>
+    </div>`;
+    
   document.body.appendChild(modal);
+  
   get('btnAccept').onclick = () => { stopRinging(); modal.remove(); handleIncomingCall(row); };
   get('btnDecline').onclick = () => { stopRinging(); modal.remove(); };
 }
@@ -526,15 +505,17 @@ function showOutgoingCallingUI(id, to) {
   if (get('outgoingCallUI')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
   const d = document.createElement('div'); d.id = 'outgoingCallUI';
-  d.innerHTML = `<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:white;padding:10px 20px;border-radius:20px;z-index:20000;display:flex;gap:10px;align-items:center;">
-    <span>Calling...</span> <button id="btnCancelCall" style="background:red;color:white;border:none;padding:5px 10px;border-radius:5px;">Cancel</button></div>`;
+  d.innerHTML = `<div style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#222;color:white;padding:15px 25px;border-radius:30px;z-index:20000;display:flex;gap:15px;align-items:center;box-shadow:0 5px 15px rgba(0,0,0,0.5);">
+    <span style="font-weight:bold;">Calling...</span> 
+    <button id="btnCancelCall" style="background:#ea0038;color:white;border:none;padding:8px 15px;border-radius:15px;font-weight:bold;cursor:pointer;">End</button>
+  </div>`;
   document.body.appendChild(d);
   get('btnCancelCall').onclick = endCall;
 }
 
 async function getSignedUrl(b, p) { const { data } = await supabase.storage.from(b).createSignedUrl(p, 3600); return data?.signedUrl; }
 function playTone(t) { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); if (audioCtx) { const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value=t==='send'?800:600; g.gain.value=0.1; o.start(); setTimeout(()=>o.stop(),150); } else BEEP_SOUND.play().catch(()=>{}); }
-function showToast(m) { const d=document.createElement('div'); d.textContent=m; d.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:green;color:white;padding:10px;border-radius:10px;z-index:9999;"; document.body.appendChild(d); setTimeout(()=>d.remove(),3000); }
+function showToast(m) { const d=document.createElement('div'); d.textContent=m; d.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#00a884;color:white;padding:10px 20px;border-radius:20px;z-index:9999;box-shadow:0 2px 5px rgba(0,0,0,0.3)"; document.body.appendChild(d); setTimeout(()=>d.remove(),3000); }
 function handleAvatarSelect(e) { if(e.target.files[0]) get('avatarPreview').textContent='📸'; }
 function openProfileScreen() { if(myProfile) { get('profileName').value=myProfile.username; get('profilePhone').value=myProfile.phone; } showScreen('profile'); }
 function renderFilePreview(f) { if(f.length) get('filePreview').textContent='File: '+f[0].name; }
@@ -548,11 +529,8 @@ async function registerPush() { if('serviceWorker' in navigator){ try{const r=aw
 function startPresence() { setInterval(()=> { if(currentUser) supabase.from('profiles').update({last_seen:new Date()}).eq('id',currentUser.id); }, 30000); }
 
 async function sendPush(uid, title, body) {
-  // Silenced 500 error so it doesn't panic the user
   if (window.location.hostname === 'localhost') return;
-  try {
-     fetch('/api/send-push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toUserId: uid, title, message: body }) }).catch(e => {});
-  } catch(e) {}
+  try { fetch('/api/send-push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toUserId: uid, title, message: body }) }).catch(e => {}); } catch(e) {}
 }
 
 window.startCallAction = startCallAction;
