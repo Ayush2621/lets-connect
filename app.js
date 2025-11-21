@@ -1,10 +1,10 @@
-// app.js — Final & Complete: Private Images, Call Handlers, Notifications, Sounds, Video Fixes
+// app.js — Final Fixes: Event Listener Placement, Call Logic, and QR Generation
 'use strict';
 
 const supabase = window.supabase;
 if (!supabase) throw new Error('Supabase client missing (check index.html)');
 
-// Reliable "Ding" Sound (Base64 placeholder - short beep)
+// Reliable "Ding" Sound
 const NOTIFICATION_SOUND = new Audio("data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgRYWFgAAAAwAAADbWlub3JfdmVyc2lvbgAwAFRYWFgAAAAkAAADY29tcGF0aWJsZV9icmFuZHMAbXA0Mmlzb21tcDQx//uQZAAAAAAA0AAAAABAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcYAAAAAAABAAAIMwAAAAAS"); 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -89,21 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // WebRTC
   let pc = null;
   let localStream = null;
-  let remoteStream = null;
-  let currentCallId = null;
   let callsChannel = null;
+  let currentCallId = null;
   let scannerStream = null;
 
   const STUN = [{ urls: 'stun:stun.l.google.com:19302' }];
 
   /* ---------- helpers ---------- */
-  function show(el) { if (!el) return; el.classList.remove('hidden'); el.style.display=''; el.removeAttribute('aria-hidden'); }
-  function hide(el) { if (!el) return; el.classList.add('hidden'); el.style.display='none'; el.setAttribute('aria-hidden','true'); }
-  function showOnly(key) { const map = { auth: authSection, profile: profileSection, app: appSection }; Object.values(map).forEach(hide); if (map[key]) show(map[key]); }
+  function show(el) { if (!el) return; el.classList.remove('hidden'); el.style.display=''; }
+  function hide(el) { if (!el) return; el.classList.add('hidden'); el.style.display='none'; }
+  function showOnly(key) { 
+      [authSection, profileSection, appSection].forEach(hide);
+      if (key === 'auth') show(authSection);
+      if (key === 'profile') show(profileSection);
+      if (key === 'app') show(appSection);
+  }
   function convIdFor(a,b){ return [a,b].sort().join('_'); }
   function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function isMobile(){ return window.innerWidth < 900; }
-
+  
   /* ---------- AUDIO SOUNDS ---------- */
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   
@@ -128,24 +131,128 @@ document.addEventListener('DOMContentLoaded', () => {
         osc.frequency.setValueAtTime(440, t);
         osc.type = 'triangle';
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.1, t + 0.1);
+        gain.gain.linearRampToValueAtTime(0.2, t + 0.1);
         gain.gain.linearRampToValueAtTime(0, t + 1.5);
         osc.stop(t + 1.5);
     }
     osc.connect(gain); gain.connect(audioCtx.destination); osc.start(t);
   }
 
-  /* ---------- SECURE IMAGE HELPER (Private Buckets) ---------- */
+  /* ---------- SECURE IMAGE HELPER ---------- */
   async function getSecureUrl(bucket, path) {
       if (!path) return null;
-      // Since bucket is private, createSignedUrl is MANDATORY
-      // Valid for 1 hour (3600 seconds)
       const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
       if (error) { console.warn('Signed URL Error:', error.message); return null; }
       return data.signedUrl;
   }
 
-  /* ---------- AUTH ---------- */
+  /* ---------- INITIALIZE LISTENERS (MOVED OUTSIDE BOOT) ---------- */
+  // Auth
+  btnSignUp.onclick = async()=> {
+    if (authBusy) return; authBusy=true; 
+    const t=btnSignUp.textContent; btnSignUp.textContent='Creating...'; btnSignUp.disabled=true;
+    const email = (signupEmail.value||'').trim(), password = (signupPass.value||'').trim();
+    if (!email || password.length < 6) { alert('Enter valid email & password'); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false; return; }
+    
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) { alert(error.message); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false; return; }
+    await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
+    await loadSession(); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false;
+  };
+
+  btnSignIn.onclick = async()=> {
+    if (authBusy) return; authBusy=true; 
+    const t=btnSignIn.textContent; btnSignIn.textContent='Logging in...'; btnSignIn.disabled=true;
+    const email = (signinEmail.value||'').trim(), password = (signinPass.value||'').trim();
+    if (!email || !password) { alert('Enter credentials'); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false; return; }
+    
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { alert(error.message); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false; return; }
+    await loadSession(); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false;
+  };
+
+  btnDemo.onclick = async()=> {
+    if (authBusy) return; authBusy=true; btnDemo.disabled=true;
+    const email = `demo${Date.now()%10000}@example.com`, password = 'demopass';
+    await supabase.auth.signUp({ email, password }).catch(()=>null);
+    await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
+    await loadSession();
+  };
+
+  // Profile
+  profileAvatar.onchange = (e)=> {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:12px;object-fit:cover" />`;
+  };
+
+  btnSaveProfile.onclick = async ()=> {
+    try {
+      btnSaveProfile.disabled = true; btnSaveProfile.textContent = 'Saving...';
+      const name = (profileName.value||'User').trim();
+      const phone = (profilePhone.value||'').trim();
+      if (!phone) throw new Error('Phone required');
+      
+      const f = profileAvatar.files && profileAvatar.files[0];
+      let avatar_path = myProfile?.avatar_path || null;
+      if (f) {
+        const path = `avatars/${currentUser.id}/${Date.now()}_${f.name.replace(/[^a-z0-9_\-\.]/gi,'_')}`;
+        const up = await supabase.storage.from('avatars').upload(path, f);
+        if (up.error) throw up.error;
+        avatar_path = path;
+      }
+      const toUpsert = { id: currentUser.id, username: name, phone, avatar_path, last_seen: new Date().toISOString() };
+      await supabase.from('profiles').upsert(toUpsert);
+      myProfile = toUpsert;
+      showOnly('app'); await bootMain();
+      registerServiceWorkerAndSubscribe();
+    } catch (err) { alert(err.message); } finally { btnSaveProfile.disabled = false; btnSaveProfile.textContent = 'Next'; }
+  };
+
+  btnSkipProfile.onclick = async ()=> {
+    const updates = { id: currentUser.id, username: 'User', phone: '', last_seen: new Date().toISOString() };
+    await supabase.from('profiles').upsert(updates);
+    myProfile = updates;
+    showOnly('app'); await bootMain();
+    registerServiceWorkerAndSubscribe();
+  };
+
+  // Messaging & UI (Moved outside bootMain so they are always active)
+  btnSendMain.onclick = sendMessageHandler;
+  inputMessage.onkeydown = (e)=> { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessageHandler(); } };
+  
+  btnAttachMain.onclick = ()=> attachFile.click();
+  attachFile.onchange = (e)=> renderFilePreview(e.target.files);
+  btnEmoji.onclick = showEmojiPicker;
+  btnVoiceCall.onclick = ()=> startCallWithActive(false);
+  btnVideoCall.onclick = ()=> startCallWithActive(true);
+  btnClearChat.onclick = clearConversation;
+  
+  if(btnBackMobile) btnBackMobile.onclick = () => { if (chatPanel) chatPanel.classList.remove('active-screen'); };
+  btnOpenProfile.onclick = ()=> { profileName.value = myProfile?.username || ''; profilePhone.value = myProfile?.phone || ''; showOnly('profile'); };
+  
+  btnAddContactMain.onclick = openAddContactModal;
+  addContactCancel.onclick = closeAddContactModal;
+  addContactSave.onclick = saveAddContact;
+  btnFindByPhone.onclick = findUserByPhoneAndAdd;
+  btnRefresh.onclick = loadContacts;
+  contactSearch.oninput = (e)=> renderContacts(e.target.value);
+
+  // QR Logic (Fixed)
+  if (btnShowQr) btnShowQr.onclick = ()=> {
+    const ph = myProfile?.phone || profilePhone.value || '';
+    if (!ph) return alert('Enter a phone number first.');
+    const payload = `${location.origin}/?addPhone=${encodeURIComponent(ph)}`;
+    // Using qrserver.com which is more reliable than Google Charts
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payload)}`;
+    show(modalQr);
+  };
+  if (qrClose) qrClose.onclick = ()=> hide(modalQr);
+  if (btnScanQr) btnScanQr.onclick = startQrScan;
+  if (qrScanClose) qrScanClose.onclick = ()=> { stopScanner(); hide(modalQrScan); };
+
+
+  /* ---------- AUTH CHECK ---------- */
   let authBusy = false;
   async function loadSession() {
     try {
@@ -167,79 +274,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { console.error('loadSession err', err); showOnly('auth'); }
   }
 
-  btnSignUp.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; const t=btnSignUp.textContent; btnSignUp.textContent='Creating...'; btnSignUp.disabled=true;
-    const email = (signupEmail.value||'').trim(), password = (signupPass.value||'').trim();
-    if (!email || password.length < 6) { alert('Enter valid email & password'); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false; return; }
-    
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) { alert(error.message); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false; return; }
-    await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
-    await loadSession(); authBusy=false; btnSignUp.textContent=t; btnSignUp.disabled=false;
-  });
-
-  btnSignIn.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; const t=btnSignIn.textContent; btnSignIn.textContent='Logging in...'; btnSignIn.disabled=true;
-    const email = (signinEmail.value||'').trim(), password = (signinPass.value||'').trim();
-    if (!email || !password) { alert('Enter credentials'); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false; return; }
-    
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { alert(error.message); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false; return; }
-    await loadSession(); authBusy=false; btnSignIn.textContent=t; btnSignIn.disabled=false;
-  });
-
-  btnDemo.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; btnDemo.disabled=true;
-    const email = `demo${Date.now()%10000}@example.com`, password = 'demopass';
-    await supabase.auth.signUp({ email, password }).catch(()=>null);
-    await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
-    await loadSession();
-  });
-
   if (!window.__authObserver) {
     window.__authObserver = true;
     supabase.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') loadSession(); });
   }
 
-  /* ---------- PROFILE ---------- */
-  profileAvatar.addEventListener('change', (e)=> {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    const url = URL.createObjectURL(f);
-    avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:12px;object-fit:cover" />`;
-  });
-
-  btnSaveProfile.addEventListener('click', async ()=> {
-    try {
-      btnSaveProfile.disabled = true; btnSaveProfile.textContent = 'Saving...';
-      const name = (profileName.value||'User').trim();
-      const phone = (profilePhone.value||'').trim();
-      if (!phone) throw new Error('Phone required');
-      
-      const f = profileAvatar.files && profileAvatar.files[0];
-      let avatar_path = myProfile?.avatar_path || null;
-      if (f) {
-        const path = `avatars/${currentUser.id}/${Date.now()}_${f.name.replace(/[^a-z0-9_\-\.]/gi,'_')}`;
-        const up = await supabase.storage.from('avatars').upload(path, f);
-        if (up.error) throw up.error;
-        avatar_path = path;
-      }
-      const toUpsert = { id: currentUser.id, username: name, phone, avatar_path, last_seen: new Date().toISOString() };
-      await supabase.from('profiles').upsert(toUpsert);
-      myProfile = toUpsert;
-      showOnly('app'); await bootMain();
-      registerServiceWorkerAndSubscribe();
-    } catch (err) { alert(err.message); } finally { btnSaveProfile.disabled = false; btnSaveProfile.textContent = 'Next'; }
-  });
-
-  btnSkipProfile.addEventListener('click', async ()=> {
-    const updates = { id: currentUser.id, username: 'User', phone: '', last_seen: new Date().toISOString() };
-    await supabase.from('profiles').upsert(updates);
-    myProfile = updates;
-    showOnly('app'); await bootMain();
-    registerServiceWorkerAndSubscribe();
-  });
-
-  /* ---------- BOOT & INIT ---------- */
+  /* ---------- BOOT MAIN ---------- */
   async function bootMain() {
     if (!myProfile) return;
     meName.textContent = myProfile.username || currentUser.email;
@@ -252,45 +292,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     await loadContacts();
-    subscribeGlobal(); // Listen for calls/messages
-
-    btnOpenProfile.onclick = ()=> { profileName.value = myProfile.username || ''; profilePhone.value = myProfile.phone || ''; showOnly('profile'); };
-    btnAddContactMain.onclick = openAddContactModal;
-    addContactCancel.onclick = closeAddContactModal;
-    addContactSave.onclick = saveAddContact;
-    btnFindByPhone.onclick = findUserByPhoneAndAdd;
-    btnRefresh.onclick = loadContacts;
-    contactSearch.oninput = (e)=> renderContacts(e.target.value);
-    btnSendMain.onclick = sendMessageHandler;
-    btnAttachMain.onclick = ()=> attachFile.click();
-    attachFile.addEventListener('change', (e)=> renderFilePreview(e.target.files));
-    inputMessage.addEventListener('keydown', (e)=> { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessageHandler(); } });
-    btnEmoji.onclick = showEmojiPicker;
-    btnVoiceCall.onclick = ()=> startCallWithActive(false);
-    btnVideoCall.onclick = ()=> startCallWithActive(true);
-    btnClearChat.onclick = clearConversation;
-    if(btnBackMobile) btnBackMobile.addEventListener('click', () => { if (chatPanel) chatPanel.classList.remove('active-screen'); });
-    
-    if (btnShowQr) btnShowQr.addEventListener('click', ()=> {
-      const payload = `${location.origin}/?addPhone=${encodeURIComponent(myProfile?.phone || '')}`;
-      qrImage.src = `https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(payload)}`;
-      show(modalQr);
-    });
-    if (qrClose) qrClose.addEventListener('click', ()=> hide(modalQr));
-    if (btnScanQr) btnScanQr.addEventListener('click', startQrScan);
-    if (qrScanClose) qrScanClose.addEventListener('click', ()=> { stopScanner(); hide(modalQrScan); });
+    subscribeGlobal(); // START LISTENING
+    registerServiceWorkerAndSubscribe();
   }
 
-  /* ---------- GLOBAL REALTIME ---------- */
+  /* ---------- GLOBAL REALTIME (FIXED CALLING) ---------- */
   function subscribeGlobal() {
       if(globalSub) globalSub.unsubscribe();
+      
+      // Listen for changes in 'calls' table specifically for current user
       globalSub = supabase.channel('global_user_'+currentUser.id)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, payload => {
             const row = payload.new;
-            if(row.type === 'offer') handleOffer(row);
+            console.log("INCOMING SIGNAL:", row); // Debug
+            
+            // If it is an 'offer', it means someone is calling us
+            if(row.type === 'offer') {
+                handleOffer(row);
+            }
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
             const row = payload.new;
+            // Notify if not current sender
             if (row.from_user !== currentUser.id) {
                 const openConvId = activeContact ? convIdFor(currentUser.id, activeContact.contact_user) : null;
                 if (openConvId !== row.conversation_id) {
@@ -299,12 +322,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         })
-        .subscribe();
+        .subscribe((status) => {
+            console.log("Global Sub Status:", status);
+        });
   }
 
   function showInAppNotification(text) {
       const div = document.createElement('div');
-      div.style.cssText = "position:fixed; top:15px; left:50%; transform:translateX(-50%); background:#202c33; color:#fff; padding:12px 20px; border-radius:24px; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.5); font-weight:500; animation: slideDown 0.3s ease;";
+      div.style.cssText = "position:fixed; top:15px; left:50%; transform:translateX(-50%); background:#00a884; color:#fff; padding:12px 20px; border-radius:24px; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.5); font-weight:500; animation: slideDown 0.3s ease;";
       div.innerHTML = `<span>🔔</span> <span>${text}</span>`;
       document.body.appendChild(div);
       setTimeout(()=> div.remove(), 3000);
@@ -388,9 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
          const atts = JSON.parse(m.attachments);
          html += `<div class="att">`;
          for (const a of atts) {
-           // --- FIX: SECURE URL FOR PRIVATE BUCKET ---
            const url = await getSecureUrl(a.bucket, a.path);
-           
            if (a.type && a.type.startsWith('image/')) html += url ? `<img class="file-thumb" src="${url}" style="max-width:200px; border-radius:8px; margin-top:5px;" />` : `[img]`;
            else if (a.type && a.type.startsWith('video/')) html += url ? `<video controls class="file-thumb" src="${url}" style="max-width:200px; border-radius:8px; margin-top:5px;"></video>` : `[vid]`;
            else html += url ? `<div class="doc-thumb">📄 <a href="${url}" download="${a.name}" target="_blank">${a.name}</a></div>` : `[file]`;
@@ -474,14 +497,19 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ---------- CALLING (FIXED) ---------- */
   function subscribeCallChannel(callId) {
     if (callsChannel) callsChannel.unsubscribe();
+    // Listen for signals on this specific Call ID
     callsChannel = supabase.channel('call_' + callId)
       .on('postgres_changes', { event:'INSERT', schema:'public', table:'calls', filter:`call_id=eq.${callId}` }, async (payload) => {
         const row = payload.new;
-        if (!row || row.from_user === currentUser.id) return;
-        // Handles the flow AFTER the initial offer (e.g. Answer, ICE, Hangup)
-        if (row.type === 'answer') await handleAnswer(row);
-        else if (row.type === 'ice' && pc) { try { await pc.addIceCandidate(new RTCIceCandidate(row.payload.candidate)); } catch(e){} }
-        else if (row.type === 'hangup') endCallLocal();
+        if (!row || row.from_user === currentUser.id) return; // Ignore my own signals
+        
+        if (row.type === 'answer') {
+            await handleAnswer(row);
+        } else if (row.type === 'ice' && pc) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(row.payload.candidate)); } catch(e){}
+        } else if (row.type === 'hangup') {
+            endCallLocal();
+        }
       }).subscribe();
   }
 
@@ -491,9 +519,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function startCall(remoteUserId, video=true) {
-    currentCallId = 'call_' + Date.now();
+    currentCallId = 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     pc = new RTCPeerConnection({ iceServers: STUN });
     
+    // Send Push Notification
     fetch('/api/send-push', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ toUserId: remoteUserId, title: 'Incoming Call', message: `Call from ${myProfile?.username}`, url: location.origin }) }).catch(()=>{});
 
     alert('Calling...'); playSound('sent'); 
@@ -503,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     pc.ontrack = (ev) => {
        avatarPreview.innerHTML = '';
-       const v = document.createElement('video'); v.autoplay = true; v.srcObject = ev.streams[0]; v.style.cssText="width:100%;height:100%;object-fit:cover";
+       const v = document.createElement('video'); v.autoplay = true; v.playsInline=true; v.srcObject = ev.streams[0]; v.style.cssText="width:100%;height:100%;object-fit:cover";
        avatarPreview.appendChild(v);
     };
 
@@ -513,9 +542,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch(e) { return alert('Mic/Cam access denied'); }
 
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+    // 1. Create Call Record (Offer)
     await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: remoteUserId, type: 'offer', payload: { sdp: offer.sdp } }]);
     
-    subscribeCallChannel(currentCallId); // Listen for the answer
+    // 2. Listen for Answer
+    subscribeCallChannel(currentCallId); 
   }
 
   async function handleOffer(row) {
@@ -529,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       pc.ontrack = (ev) => {
          avatarPreview.innerHTML = '';
-         const v = document.createElement('video'); v.autoplay = true; v.srcObject = ev.streams[0]; v.style.cssText="width:100%;height:100%;object-fit:cover";
+         const v = document.createElement('video'); v.autoplay = true; v.playsInline=true; v.srcObject = ev.streams[0]; v.style.cssText="width:100%;height:100%;object-fit:cover";
          avatarPreview.appendChild(v);
       };
       
