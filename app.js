@@ -1,4 +1,4 @@
-// app.js — FINAL COMPLETE VERSION: Fixed Chat Loading, QR Logic, and Call Reliability
+// app.js — FINAL FIXED VERSION (Supabase v2 Compatibility Fixes)
 'use strict';
 
 // --- 1. GLOBAL SETUP ---
@@ -29,7 +29,7 @@ let scannerStream = null;
 
 const STUN = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-// --- HELPER FUNCTIONS (Hoisted) ---
+// --- HELPER FUNCTIONS ---
 function get(id) { return document.getElementById(id); }
 function getVal(id) { return get(id) ? get(id).value.trim() : ''; }
 function setText(id, val) { if(get(id)) get(id).textContent = val; }
@@ -165,7 +165,7 @@ async function loadUserProfile() {
         setText('meName', data.username || 'Me');
         setText('mePhone', data.phone || '');
         
-        // Set input values too (Fixes QR issue if user goes straight to QR)
+        // Pre-fill profile inputs
         get('profileName').value = data.username || '';
         get('profilePhone').value = data.phone || '';
 
@@ -203,7 +203,6 @@ async function saveProfile() {
     
     if (error) alert(error.message);
     else {
-        // Update local state immediately so QR works without reload
         myProfile = updateData; 
         await loadUserProfile();
     }
@@ -272,12 +271,14 @@ async function loadMessages() {
     container.innerHTML = '<div class="muted small" style="padding:20px;text-align:center">Loading...</div>';
     const convId = convIdFor(currentUser.id, activeContact.contact_user);
     
-    await supabase.from('conversations').upsert({ id: convId }).catch(() => {});
+    // FIX 1: Removed .catch() - Supabase v2 returns { error } object, no catch needed on builder
+    const { error: upsertError } = await supabase.from('conversations').upsert({ id: convId });
+    if(upsertError) console.warn("Conversation init error (ignore if duplicate):", upsertError);
+
     const { data } = await supabase.from('messages').select('*').eq('conversation_id', convId).order('created_at');
     
     container.innerHTML = '';
     if (data && data.length > 0) {
-        // Fix: Use Promise.all to handle multiple images loading in parallel but render them all
         for (const m of data) {
             await renderMessage(m);
         }
@@ -288,12 +289,14 @@ async function loadMessages() {
     if (messageSub) messageSub.unsubscribe();
     messageSub = supabase.channel('chat:' + convId)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-            renderMessage(payload.new);
-            if (payload.new.from_user !== currentUser.id) playTone('receive');
+            if(payload.new.conversation_id === convId) {
+                renderMessage(payload.new);
+                if (payload.new.from_user !== currentUser.id) playTone('receive');
+            }
         })
         .subscribe();
     
-    container.scrollTop = container.scrollHeight;
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
 }
 
 async function sendMessage() {
@@ -318,32 +321,47 @@ async function sendMessage() {
     }
 
     const payload = { conversation_id: convId, from_user: currentUser.id, text, attachments: attachments.length ? JSON.stringify(attachments) : null };
+    
     const { error } = await supabase.from('messages').insert([payload]);
     if (error) alert('Message failed: ' + error.message);
     
     sendPush(activeContact.contact_user, 'New Message', text || 'Sent a file');
 }
 
-async function renderMessage(msg) {
+function renderMessage(msg) {
     const div = document.createElement('div');
     div.className = `msg ${msg.from_user === currentUser.id ? 'me' : 'them'}`;
     let content = `<div>${escapeHtml(msg.text)}</div>`;
 
+    // Append immediately
+    const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    div.innerHTML = content + `<div class="time">${time}</div>`;
+    
+    const container = get('messages');
+    if(container.innerHTML.includes('No messages yet')) container.innerHTML = '';
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+
+    // Async load images
     if (msg.attachments) {
         try {
             const atts = JSON.parse(msg.attachments);
-            for (const a of atts) {
+            const attDiv = document.createElement('div');
+            attDiv.className = 'att';
+            div.insertBefore(attDiv, div.lastChild);
+
+            atts.forEach(async (a) => {
                 const url = await getSignedUrl('attachments', a.path);
                 if (url) {
-                    if (a.type.startsWith('image')) content += `<img src="${url}" class="file-thumb" style="max-width:200px;border-radius:8px;margin-top:5px;">`;
-                    else content += `<div class="doc-thumb"><a href="${url}" target="_blank">📄 ${a.name}</a></div>`;
+                    let html = '';
+                    if (a.type.startsWith('image')) html = `<img src="${url}" class="file-thumb" style="max-width:200px;border-radius:8px;margin-top:5px;display:block;">`;
+                    else if (a.type.startsWith('video')) html = `<video src="${url}" controls class="file-thumb" style="max-width:200px;border-radius:8px;margin-top:5px;display:block;"></video>`;
+                    else html = `<div class="doc-thumb"><a href="${url}" target="_blank">📄 ${a.name}</a></div>`;
+                    attDiv.innerHTML += html;
                 }
-            }
-        } catch (e) { console.error(e); } // Silent fail on image load shouldn't stop text
+            });
+        } catch (e) {}
     }
-    div.innerHTML = content + `<div class="time">${new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
-    get('messages').appendChild(div);
-    get('messages').scrollTop = get('messages').scrollHeight;
 }
 
 // --- CALLING ---
@@ -473,17 +491,18 @@ function showToast(msg) {
 
 function handleAvatarSelect(e) { if (e.target.files[0]) get('avatarPreview').innerHTML = '📸'; }
 function openProfileScreen() { 
-    // Fix: Read from myProfile if available, else fallback
-    get('profileName').value = myProfile?.username || ''; 
-    get('profilePhone').value = myProfile?.phone || ''; 
+    // Fix: Use profile from memory
+    if(myProfile) {
+        get('profileName').value = myProfile.username || ''; 
+        get('profilePhone').value = myProfile.phone || ''; 
+    }
     showScreen('profile'); 
 }
 function closeChatPanel() { if (get('chatPanel')) get('chatPanel').classList.remove('active-screen'); activeContact = null; }
 function renderFilePreview(files) { if (files.length) get('filePreview').innerHTML = `📄 ${files[0].name}`; }
 
-// FIX: QR Logic uses fallback if state not ready
+// FIX: QR Logic
 function showMyQr() { 
-    // Check profile, fallback to input if user is editing profile
     const ph = myProfile?.phone || get('profilePhone').value; 
     if (!ph) return alert('No phone set. Save profile first.'); 
     get('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(ph)}`; 
@@ -526,7 +545,6 @@ async function startQrScan() {
 function stopScanner() { if (scannerStream) scannerStream.getTracks().forEach(t => t.stop()); }
 function handleScannedText(txt) {
     if (!txt) return;
-    // Handle URL params or raw text
     if (txt.includes('addPhone=')) get('addContactPhone').value = new URL(txt).searchParams.get('addPhone');
     else get('addContactPhone').value = txt;
     saveNewContact();
@@ -556,10 +574,13 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
+// FIX 2: Removed .catch() here as well
 function startPresence() {
     if (presenceInterval) clearInterval(presenceInterval);
     presenceInterval = setInterval(() => {
         if (!currentUser) return;
-        supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id).catch(() => {});
+        supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id).then(({ error }) => {
+            if (error) console.warn('Presence update failed:', error);
+        });
     }, 15000);
 }
