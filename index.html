@@ -2,190 +2,182 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <link rel="shortcut icon" type="image/x-icon" href="icon.png">
-  <title>Lets Connect — Secure Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#202c33"> <link rel="shortcut icon" type="image/x-icon" href="icon.png">
+  <title>Lets Connect</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="root">
 
-    <!-- AUTH -->
     <section id="authSection" class="screen auth-screen" role="region">
-      <div class="auth-card" aria-labelledby="authTitle">
+      <div class="auth-card">
         <div class="brand">
           <div class="logo">LC</div>
           <div class="brand-text">
-            <h1 id="authTitle">Lets Connect</h1>
-            <p class="muted">Secure messaging • Calls • Storage</p>
+            <h1 style="font-weight:500; color: #e9edef;">Welcome</h1>
+            <p class="muted">Secure messaging • Calls</p>
           </div>
         </div>
 
-        <div class="tabs" role="tablist" aria-label="Auth tabs">
-          <button id="tabSignIn" class="tab active" type="button">Sign In</button>
+        <div class="tabs">
+          <button id="tabSignIn" class="tab active" type="button">Log In</button>
           <button id="tabSignUp" class="tab" type="button">Sign Up</button>
         </div>
 
-        <form id="formSignIn" class="form" onsubmit="return false" novalidate>
-          <input id="signinEmail" type="email" placeholder="Email" autocomplete="username" required />
-          <input id="signinPass" type="password" placeholder="Password" autocomplete="current-password" required />
-          <div class="row gap">
-            <button id="btnSignIn" class="btn primary" type="button">Sign In</button>
-            <button id="btnSSO" class="btn ghost" type="button">Sign in with Google</button>
-          </div>
+        <form id="formSignIn" class="form">
+          <input id="signinEmail" type="email" placeholder="Email Address" />
+          <input id="signinPass" type="password" placeholder="Password" />
+          <button id="btnSignIn" class="btn primary" type="button">Log In</button>
         </form>
 
-        <form id="formSignUp" class="form hidden" onsubmit="return false" novalidate>
-          <input id="signupEmail" type="email" placeholder="Email" autocomplete="email" required />
-          <input id="signupPass" type="password" placeholder="Password (min 6)" autocomplete="new-password" required />
-          <div class="row gap">
-            <button id="btnSignUp" class="btn primary" type="button">Create account</button>
-            <button id="btnDemo" class="btn ghost" type="button">Try demo</button>
-          </div>
-          <p class="muted small">After sign up you'll set your profile (display name & phone).</p>
+        <form id="formSignUp" class="form hidden">
+          <input id="signupEmail" type="email" placeholder="Email Address" />
+          <input id="signupPass" type="password" placeholder="Create Password (min 6)" />
+          <button id="btnSignUp" class="btn primary" type="button">Create Account</button>
+          <button id="btnDemo" class="btn ghost" style="margin-top:10px" type="button">Use Demo Account</button>
         </form>
       </div>
     </section>
 
-    <!-- PROFILE SETUP -->
-    <section id="profileSection" class="screen hidden" aria-hidden="true" role="region">
-      <div class="profile-card" aria-labelledby="profileTitle">
-        <h2 id="profileTitle">Set up your account</h2>
+    <section id="profileSection" class="screen hidden profile-screen">
+      <div class="profile-card">
+        <h2 style="text-align:center; margin-bottom:30px;">Profile Info</h2>
         <div class="avatar-preview" id="avatarPreview">U</div>
-        <label class="file-label">Upload avatar <input id="profileAvatar" type="file" accept="image/*" /></label>
+        <label class="file-label" style="text-align:center; display:block; color:var(--accent);">Tap to change photo
+          <input id="profileAvatar" type="file" accept="image/*" style="display:none" />
+        </label>
 
-        <input id="profileName" placeholder="Display name" />
-        <input id="profilePhone" placeholder="Phone number (required for discovery)" />
+        <div class="form">
+            <input id="profileName" placeholder="Enter your name" />
+            <input id="profilePhone" placeholder="Phone number" />
+            
+            <div id="profilePhoneDisplay" style="text-align:center; font-family:monospace; color:var(--muted)"></div>
 
-        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
-          <div style="flex:1">
-            <div style="font-size:12px;color:#9aa6ad">Your public phone (used to be found)</div>
-            <div id="profilePhoneDisplay" style="font-weight:600;word-break:break-all">—</div>
-          </div>
+            <div class="row gap" style="justify-content:center; margin-top:10px;">
+                <button id="btnShowQr" class="btn-sm ghost" type="button">Show QR</button>
+                <button id="btnScanQr" class="btn-sm ghost" type="button">Scan QR</button>
+            </div>
+
+            <button id="btnSaveProfile" class="btn primary" style="margin-top:20px;" type="button">Next</button>
+            <button id="btnSkipProfile" class="btn ghost" style="border:none;" type="button">Skip</button>
         </div>
-
-        <div style="margin-top:10px;display:flex;gap:8px;">
-          <button id="btnShowQr" class="btn-sm" type="button">Show QR</button>
-          <button id="btnScanQr" class="btn-sm ghost" type="button">Scan QR</button>
-        </div>
-
-        <div class="row gap">
-          <button id="btnSaveProfile" class="btn primary" type="button">Save profile</button>
-          <button id="btnSkipProfile" class="btn ghost" type="button">Skip</button>
-        </div>
-        <p class="muted small">Phone number helps friends find you. You can change it later in Settings.</p>
       </div>
     </section>
 
-    <!-- APP -->
-    <section id="appSection" class="screen hidden app-screen" aria-hidden="true">
-      <aside class="sidebar" role="complementary">
+    <section id="appSection" class="screen hidden app-screen">
+      
+      <aside id="sidebarPanel" class="sidebar">
         <div class="sidebar-top">
-          <div id="meAvatar" class="avatar-lg">U</div>
-          <div class="me-meta">
-            <div id="meName">You</div>
-            <div id="mePhone" class="muted small">—</div>
+          <div id="meAvatar" class="avatar-lg" style="width:40px; height:40px; font-size:16px;">U</div>
+          <div class="me-meta" style="margin-left:10px;">
+            <div id="meName" style="font-weight:600; font-size:16px;">You</div>
           </div>
-          <button id="btnOpenProfile" class="icon small" title="Profile" type="button">⚙️</button>
+          <button id="btnOpenProfile" class="icon" style="padding:8px;" type="button">
+             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
         </div>
 
-        <div class="controls">
-          <input id="contactSearch" placeholder="Search contacts or phone" />
-          <div class="row gap small-2">
-            <button id="btnAddContactMain" class="btn-sm" type="button">+ Contact</button>
-            <button id="btnRefresh" class="btn-sm ghost" type="button">Refresh</button>
-          </div>
+        <div class="controls" style="padding:10px;">
+          <input id="contactSearch" placeholder="Search..." />
         </div>
+        
+        <button id="btnAddContactMain" title="New Chat" type="button">New</button>
+        <button id="btnRefresh" class="btn-sm ghost hidden" type="button"></button>
 
-        <div id="contactsList" class="contacts" aria-live="polite"></div>
+        <div id="contactsList" class="contacts"></div>
       </aside>
 
-      <main class="chat" role="main">
+      <main id="chatPanel" class="chat">
         <div class="chat-header">
           <div class="chat-left">
+            <button id="btnBackMobile" type="button">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+            
             <div id="chatAvatar" class="avatar-md">U</div>
-            <div>
-              <div id="chatTitle">Select contact</div>
-              <div id="chatSubtitle" class="muted small">—</div>
+            <div style="margin-left:8px;">
+              <div id="chatTitle" style="font-weight:600; font-size:16px;">Contact</div>
+              <div id="chatSubtitle" class="muted small" style="font-size:12px;">Online</div>
             </div>
           </div>
           <div class="chat-actions">
-            <button id="btnVoiceCall" class="icon" title="Voice call" type="button">🔊</button>
-            <button id="btnVideoCall" class="icon" title="Video call" type="button">🎥</button>
-            <button id="btnClearChat" class="icon" title="Clear conversation" type="button">🗑</button>
+            <button id="btnVoiceCall" class="icon" type="button">📞</button>
+            <button id="btnVideoCall" class="icon" type="button">📹</button>
+            <button id="btnClearChat" class="icon" type="button">⋮</button>
           </div>
         </div>
 
-        <div id="messages" class="messages" role="log" aria-live="polite"></div>
+        <div id="messages" class="messages"></div>
 
         <div class="composer">
-          <button id="btnEmoji" class="icon" type="button">😊</button>
-          <input id="inputMessage" placeholder="Write a message..." autocomplete="off" />
+          <button id="btnEmoji" class="icon" style="padding:6px;" type="button">😊</button>
+          <button id="btnAttachMain" class="icon" style="padding:6px;" type="button">📎</button>
+          <input id="inputMessage" placeholder="Message" autocomplete="off" />
           <input id="attachFile" type="file" style="display:none" multiple />
-          <button id="btnAttachMain" class="icon" type="button">📎</button>
-          <button id="btnSendMain" class="btn primary" type="button">Send</button>
-
-          <!-- file preview -->
-          <div id="filePreview" class="file-preview" aria-live="polite"></div>
+          <button id="btnSendMain" class="icon" style="background:var(--accent); color:#fff; border-radius:50%; width:40px; height:40px; padding:10px; margin-left:4px;" type="button">➤</button>
         </div>
+        <div id="filePreview" class="file-preview"></div>
       </main>
     </section>
 
-    <!-- modal add contact (phone only) -->
-    <div id="modalAddContact" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-card">
-        <h3>Add Contact</h3>
-        <input id="addContactName" placeholder="Display name (optional)" />
-        <input id="addContactPhone" placeholder="Enter phone number" />
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button id="btnFindByPhone" class="btn-sm" type="button">Find by phone</button>
-          <div style="flex:1"></div>
+    <div id="modalAddContact" class="modal hidden">
+      <div class="modal-card" style="padding:20px;">
+        <h3 style="margin-top:0;">New Chat</h3>
+        <input id="addContactName" placeholder="Name (Optional)" style="margin-bottom:10px;" />
+        <input id="addContactPhone" placeholder="Phone Number" type="tel" />
+        <div style="margin-top:15px; display:flex; gap:10px;">
+             <button id="btnFindByPhone" class="btn-sm ghost" style="flex:1" type="button">Search</button>
         </div>
-        <div class="row gap right" style="margin-top:12px">
+        <div class="row gap right" style="margin-top:20px; justify-content:flex-end;">
           <button id="addContactCancel" class="btn ghost" type="button">Cancel</button>
-          <button id="addContactSave" class="btn" type="button">Save</button>
+          <button id="addContactSave" class="btn primary" type="button">Add</button>
         </div>
       </div>
     </div>
 
-    <!-- QR modal -->
-    <div id="modalQr" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-card" style="text-align:center">
-        <h3>Your invite QR</h3>
-        <img id="qrImage" src="" alt="QR code" style="width:220px;height:220px;margin:6px auto;border-radius:8px" />
-        <p class="muted small">Scan this QR to add this phone to Lets Connect.</p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+    <div id="modalQr" class="modal hidden">
+        <div class="modal-card" style="text-align:center; padding:20px;">
+          <h3>My Code</h3>
+          <img id="qrImage" src="" style="width:200px; height:200px; border-radius:8px;" />
+          <br/><br/>
           <button id="qrClose" class="btn ghost" type="button">Close</button>
         </div>
-      </div>
     </div>
-
-    <!-- QR scan modal -->
-    <div id="modalQrScan" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-card" style="text-align:center">
-        <h3>Scan QR to add contact</h3>
-        <video id="qrVideo" autoplay playsinline style="width:100%;max-width:360px;border-radius:8px"></video>
-        <p class="muted small">Point camera at QR containing phone number.</p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
-          <button id="qrScanClose" class="btn ghost" type="button">Close</button>
+    
+    <div id="modalQrScan" class="modal hidden">
+        <div class="modal-card" style="text-align:center; padding:20px;">
+          <h3>Scan Code</h3>
+          <video id="qrVideo" autoplay playsinline style="width:100%; height:250px; background:#000; border-radius:8px; object-fit:cover;"></video>
+          <br/><br/>
+          <button id="qrScanClose" class="btn ghost" type="button">Stop</button>
         </div>
-      </div>
     </div>
 
   </div>
 
-  <!-- Supabase init (client anon key) -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
     const SUPABASE_URL = 'https://ojspvwkoetgbgwycehpz.supabase.co'
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qc3B2d2tvZXRnYmd3eWNlaHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MTI0MzQsImV4cCI6MjA3OTE4ODQzNH0.AXPZu09ka2n3LlYQI4QDmToGqAcvuzjdx2po0b0ZI84'
     window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-    // IMPORTANT: replace the string below with your actual VAPID public key (base64 url-safe)
-    // Example: window.VAPID_PUBLIC_KEY = 'BIms...';
     window.VAPID_PUBLIC_KEY = 'BJRQH4EQkS9RdzMg0F1W28lN7i0k1R_3HdWcvUHoDsxDmsfMPFfhPyh5V2vPMYlCcKFSqRZP4HyI0cFpD3R2ywU';
   </script>
 
   <script type="module" src="app.js"></script>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnBack = document.getElementById('btnBackMobile');
+        const chatPanel = document.getElementById('chatPanel');
+        
+        btnBack.addEventListener('click', () => {
+            // Slide chat away
+            chatPanel.style.transform = 'translateX(100%)'; 
+            // Optional: clear active contact highlight in list
+            document.querySelectorAll('.contact.active').forEach(el => el.classList.remove('active'));
+        });
+    });
+  </script>
 </body>
 </html>

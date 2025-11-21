@@ -394,14 +394,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------- contacts ---------- */
-  async function loadContacts() {
-    contactsList.innerHTML = '<div class="muted small">Loading...</div>';
+  async function selectContact(contact) {
+    if (!contact.contact_user) return alert('Contact is not a registered user yet. They must register (use the same phone) to chat.');
+    activeContact = contact;
+    chatTitle.textContent = contact.name || 'Contact';
+    chatSubtitle.textContent = contact.phone || '';
+    chatAvatar.textContent = (contact.name && contact.name[0]) ? contact.name[0].toUpperCase() : 'U';
+    messages.innerHTML = '<div class="muted small">Loading conversation...</div>';
+    
+    // --- UI CHANGE FOR WEBVIEW ---
+    // Instead of hiding sidebar, we slide the chat over it
+    const chatPanel = document.getElementById('chatPanel');
+    if (window.innerWidth < 900) {
+       chatPanel.style.transform = 'translateX(0)';
+    }
+    // -----------------------------
+
+    const conv = convIdFor(currentUser.id, contact.contact_user);
     try {
-      const { data, error } = await supabase.from('contacts').select('*').eq('owner', currentUser.id).order('created_at', { ascending: true });
-      if (error) throw error;
-      myContacts = data || [];
-      renderContacts();
-    } catch (err) { console.warn(err); contactsList.innerHTML = '<div class="muted small">Could not load contacts</div>'; }
+      const { data } = await supabase.from('conversations').select('*').eq('id', conv).limit(1).maybeSingle();
+      if (!data) await supabase.from('conversations').insert([{ id: conv }]);
+      const { data: msgs } = await supabase.from('messages').select('*').eq('conversation_id', conv).order('created_at', { ascending: true }).limit(500);
+      messages.innerHTML = '';
+      if (msgs && msgs.length) for (const m of msgs) await renderMessageRow(m); else messages.innerHTML = '<div class="muted small">No messages yet</div>';
+      if (messageSub && messageSub.unsubscribe) messageSub.unsubscribe();
+      messageSub = supabase.channel('messages_'+conv).on('postgres_changes', { event:'INSERT', schema:'public', table:'messages', filter:`conversation_id=eq.${conv}` }, payload => {
+        if (payload && payload.new && payload.new.from_user !== currentUser.id) {
+          playNotification();
+        }
+        renderMessageRow(payload.new); messages.scrollTop = messages.scrollHeight;
+      }).subscribe();
+    } catch (err) { console.error(err); messages.innerHTML = '<div class="muted small">Could not load messages</div>'; }
   }
 
   function renderContacts(filter='') {
