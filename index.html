@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#111b21">
+  <link rel="shortcut icon" type="image/x-icon" href="icon.png">
   <title>Lets Connect</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -26,12 +27,10 @@
           <button id="tabSignUp" class="tab" type="button">Sign Up</button>
         </div>
 
-        <!-- Added onsubmit="return false" to prevent page reload crashes -->
         <form id="formSignIn" class="form" onsubmit="return false">
           <input id="signinEmail" type="email" placeholder="Email Address" autocomplete="username" required />
           <input id="signinPass" type="password" placeholder="Password" autocomplete="current-password" required />
           <button id="btnSignIn" class="btn primary" type="button">Log In</button>
-          <button id="btnSSO" class="btn ghost hidden" type="button">Google</button> <!-- Hidden if unused -->
         </form>
 
         <form id="formSignUp" class="form hidden" onsubmit="return false">
@@ -89,9 +88,8 @@
           <input id="contactSearch" placeholder="Search..." />
         </div>
         
-        <!-- Floating Action Button -->
         <button id="btnAddContactMain" class="fab" title="New Chat" type="button">+</button>
-        <button id="btnRefresh" class="hidden" type="button"></button> <!-- Hidden refresh -->
+        <button id="btnRefresh" class="hidden" type="button"></button>
 
         <div id="contactsList" class="contacts"></div>
       </aside>
@@ -100,11 +98,7 @@
       <main id="chatPanel" class="chat">
         <div class="chat-header">
           <div class="chat-left">
-            <!-- Back Button -->
-            <button id="btnBackMobile" class="icon" type="button" style="margin-right:5px;">
-              ←
-            </button>
-            
+            <button id="btnBackMobile" class="icon" type="button" style="margin-right:5px;">←</button>
             <div id="chatAvatar" class="avatar-md">U</div>
             <div style="margin-left:8px;">
               <div id="chatTitle" style="font-weight:600; font-size:16px;">Contact</div>
@@ -167,32 +161,15 @@
 
   </div>
 
-  <!-- Supabase Configuration -->
+  <!-- Supabase Config -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-    
-    // Your configuration
     const SUPABASE_URL = 'https://ojspvwkoetgbgwycehpz.supabase.co'
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qc3B2d2tvZXRnYmd3eWNlaHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MTI0MzQsImV4cCI6MjA3OTE4ODQzNH0.AXPZu09ka2n3LlYQI4QDmToGqAcvuzjdx2po0b0ZI84'
-    
     window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     window.VAPID_PUBLIC_KEY = 'BJRQH4EQkS9RdzMg0F1W28lN7i0k1R_3HdWcvUHoDsxDmsfMPFfhPyh5V2vPMYlCcKFSqRZP4HyI0cFpD3R2ywU';
   </script>
 
-  <!-- Main App Logic -->
   <script type="module" src="app.js"></script>
-  
-  <!-- Mobile Back Button Logic -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const btnBack = document.getElementById('btnBackMobile');
-        const chatPanel = document.getElementById('chatPanel');
-        if(btnBack && chatPanel) {
-            btnBack.addEventListener('click', () => {
-                chatPanel.classList.remove('active-screen');
-            });
-        }
-    });
-  </script>
 </body>
 </html>
