@@ -1,0 +1,17 @@
+{
+  "name": "lets-connect",
+  "version": "1.0.0",
+  "description": "Lets Connect — Secure Chat",
+  "main": "api/send-push.js",
+  "scripts": {
+    "start": "node api/send-push.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "web-push": "^3.4.4"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
+
