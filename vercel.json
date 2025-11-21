@@ -4,9 +4,7 @@
     "api/*.js": {
       "runtime": "nodejs22.x"
     }
-  },
-  "routes": [
-    { "src": "/(.*)", "dest": "/$1" }
-  ]
+  }
 }
+
 
