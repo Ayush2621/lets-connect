@@ -1,379 +1,101 @@
 :root {
-  /* WhatsApp Dark Theme Palette */
-  --bg: #111b21;           /* Main background */
-  --header: #202c33;       /* Headers/Nav */
-  --card: #202c33;         /* Cards/Elements */
-  --incoming: #202c33;     /* Received Message */
-  --outgoing: #005c4b;     /* Sent Message */
-  --accent: #00a884;       /* Main Accent (Teal) */
-  --text: #e9edef;         /* Primary Text */
-  --muted: #8696a0;        /* Secondary Text */
-  --input: #2a3942;        /* Input fields */
+  --bg: #111b21;
+  --header: #202c33;
+  --card: #202c33;
+  --incoming: #202c33;
+  --outgoing: #005c4b;
+  --accent: #00a884;
+  --text: #e9edef;
+  --muted: #8696a0;
+  --input: #2a3942;
   --border: rgba(134, 150, 160, 0.15);
-  
-  /* Safety for notches */
   --safe-top: env(safe-area-inset-top);
   --safe-bottom: env(safe-area-inset-bottom);
-  
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; user-select: none; }
 
-html, body {
-  height: 100%;
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  overflow: hidden; /* Prevent pull-to-refresh on body */
-  user-select: none; /* App-like feel */
-}
+#root { height: 100vh; width: 100vw; display: flex; flex-direction: column; padding: 0; }
+.hidden { display: none !important; }
 
-/* --- Layout & Containers --- */
-#root {
-  height: 100vh;
-  height: 100dvh; /* Mobile viewport fix */
-  width: 100vw;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
-
+/* SCREENS */
 .screen {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
+  width: 100%; height: 100%; position: absolute; inset: 0;
+  background: var(--bg); display: flex; flex-direction: column;
   overflow: hidden;
 }
 
-.hidden { display: none !important; }
-
-/* --- Auth & Profile (Full Screen Mobile Style) --- */
+/* AUTH & PROFILE */
 .auth-screen, .profile-screen {
-  padding: 20px;
-  justify-content: center;
-  align-items: center;
-  z-index: 50;
-}
-
-.auth-card, .profile-card {
-  width: 100%;
-  max-width: 400px;
-  background: transparent; /* Remove card look for native feel */
-  padding: 0;
-  box-shadow: none;
-}
-
-.brand {
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.logo {
-  width: 80px;
-  height: 80px;
-  font-size: 32px;
-  margin-bottom: 15px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-
-/* --- Forms & Inputs --- */
-.form { gap: 16px; }
-
-input {
-  padding: 14px 16px;
-  font-size: 16px;
-  background: var(--input);
-  border: 1px solid transparent;
-  border-radius: 24px; /* Rounded pill shape */
-  color: var(--text);
-  outline: none;
-  transition: 0.2s;
-}
-
-input:focus { border-color: var(--accent); }
-
-/* --- Buttons --- */
-.btn {
-  padding: 14px;
-  border-radius: 24px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #111b21;
-}
-
-.btn.ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--accent);
-}
-
-.btn:active { opacity: 0.8; transform: scale(0.98); }
-
-/* --- Tabs --- */
-.tabs {
-  background: var(--input);
-  padding: 4px;
-  border-radius: 24px;
-  margin-bottom: 30px;
-}
-
-.tab {
-  border: none;
-  color: var(--muted);
-  padding: 10px;
-  border-radius: 20px;
-  font-weight: 500;
-  transition: 0.2s;
-}
-
-.tab.active {
-  background: var(--bg);
-  color: var(--accent);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-/* --- APP LAYOUT (Sidebar/Chat) --- */
-.app-screen {
-  flex-direction: row;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* Sidebar (Contact List) */
-.sidebar {
-  width: 100%; /* Default to full width on mobile */
-  background: var(--bg);
-  border: none;
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
-}
-
-.sidebar-top {
-  padding: 16px;
-  padding-top: calc(16px + var(--safe-top));
-  background: var(--header);
-  height: auto;
-  border-bottom: none;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-/* Make Search Bar darker */
-.controls input {
-  background: var(--input);
-  height: 40px;
-}
-
-.contacts {
-  padding: 0;
+  z-index: 50; /* Always on top when active */
+  padding: 20px; justify-content: center; align-items: center;
   overflow-y: auto;
 }
+.auth-card, .profile-card { width: 100%; max-width: 400px; padding: 0; }
 
-.contact {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  gap: 16px;
-}
+.brand { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 40px; }
+.logo { width: 80px; height: 80px; border-radius: 20px; background: linear-gradient(135deg, #00a884, #005c4b); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; margin-bottom: 15px; color: #000; }
 
-.contact:hover, .contact:active { background: rgba(255,255,255,0.03); }
+/* FORMS */
+.form { display: flex; flex-direction: column; gap: 16px; }
+input { padding: 14px 16px; font-size: 16px; background: var(--input); border: 1px solid transparent; border-radius: 24px; color: var(--text); outline: none; width: 100%; }
+input:focus { border-color: var(--accent); }
 
-.contact .avatar { width: 50px; height: 50px; font-size: 18px; }
+/* BUTTONS */
+.btn { padding: 14px; border-radius: 24px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; width: 100%; }
+.btn.primary { background: var(--accent); color: #111b21; }
+.btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--accent); }
+.btn:disabled { opacity: 0.7; cursor: wait; }
+.btn-sm { padding: 8px 16px; border-radius: 18px; border: none; font-size: 13px; cursor: pointer; }
 
-/* Floating Action Button for Add Contact */
-#btnAddContactMain {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 24px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  z-index: 100;
-}
-/* Hide the text inside the button using a trick, show icon */
-#btnAddContactMain::before { content: "+"; font-size: 32px; }
-#btnAddContactMain { font-size: 0; } 
+.tabs { background: var(--input); padding: 4px; border-radius: 24px; margin-bottom: 30px; display: flex; }
+.tab { flex: 1; border: none; background: none; color: var(--muted); padding: 10px; border-radius: 20px; font-weight: 500; }
+.tab.active { background: var(--bg); color: var(--accent); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
-/* --- Chat Area --- */
-.chat {
-  width: 100%;
-  background: #0b141a; /* Chat specific background */
-  /* Optional: Add WhatsApp Doodle pattern opacity if you had the image */
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 20;
-  transform: translateX(100%); /* Hidden by default on mobile */
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* APP LAYOUT */
+.app-screen { flex-direction: row; z-index: 10; }
+.sidebar { width: 100%; background: var(--bg); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+.sidebar-top { padding: 16px; padding-top: calc(16px + var(--safe-top)); background: var(--header); display: flex; align-items: center; gap: 12px; }
+.contacts { flex: 1; overflow-y: auto; }
+.contact { padding: 12px 16px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.contact:active { background: rgba(255,255,255,0.05); }
+.contact .avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--input); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 18px; color: var(--muted); }
 
-/* When Chat is active (handled by JS toggling class or style) */
-.chat.active-screen {
-  transform: translateX(0);
-}
+.fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 28px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
 
-.chat-header {
-  background: var(--header);
-  padding: 10px 12px;
-  padding-top: calc(10px + var(--safe-top));
-  height: auto;
-  min-height: 60px;
-  gap: 10px;
+/* CHAT */
+.chat { 
+  position: absolute; inset: 0; background: #0b141a; z-index: 60;
+  display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform 0.3s ease; 
 }
+.chat.active-screen { transform: translateX(0); }
+.chat-header { background: var(--header); padding: 10px 12px; padding-top: calc(10px + var(--safe-top)); display: flex; justify-content: space-between; align-items: center; }
+.chat-left { display: flex; align-items: center; }
+.avatar-md { width: 40px; height: 40px; border-radius: 50%; background: var(--input); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.messages { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 80px; display: flex; flex-direction: column; gap: 4px; }
 
-/* Back Button (Hidden on Desktop, Visible Mobile) */
-#btnBackMobile {
-  display: flex;
-  background: none;
-  border: none;
-  color: var(--text);
-  padding: 8px;
-  margin-right: -8px;
-  cursor: pointer;
-}
+/* BUBBLES */
+.msg { max-width: 80%; padding: 8px 10px; border-radius: 8px; font-size: 15px; line-height: 1.4; position: relative; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); }
+.msg.me { align-self: flex-end; background: var(--outgoing); color: #e9edef; border-top-right-radius: 0; }
+.msg:not(.me) { align-self: flex-start; background: var(--incoming); border-top-left-radius: 0; }
+.msg .time { font-size: 11px; color: rgba(255,255,255,0.6); float: right; margin-left: 8px; margin-top: 4px; }
 
-.messages {
-  background-image: radial-gradient(#2a3942 1px, transparent 1px); /* Subtle pattern */
-  background-size: 20px 20px;
-  padding: 16px;
-  padding-bottom: 90px; /* Space for composer */
-}
+.composer { background: var(--header); padding: 8px; padding-bottom: calc(8px + var(--safe-bottom)); display: flex; align-items: center; gap: 8px; }
+.composer input { background: var(--input); padding: 10px 16px; border-radius: 24px; }
+.send-btn { background: var(--accent); color: #fff; border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.icon { background: none; border: none; color: var(--muted); font-size: 20px; padding: 8px; }
 
-/* Message Bubbles */
-.msg {
-  max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  position: relative;
-  font-size: 15px;
-  line-height: 1.4;
-  box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
-  margin-bottom: 4px;
-}
+/* MODAL */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.modal-card { background: var(--card); width: 90%; max-width: 360px; padding: 24px; border-radius: 16px; }
+.center-text { text-align: center; }
 
-.msg.me {
-  background: var(--outgoing);
-  color: #e9edef;
-  border-top-right-radius: 0;
-}
-.msg.me::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border: 8px solid transparent;
-  border-top-color: var(--outgoing);
-  border-left-color: var(--outgoing);
-  border-bottom: 0;
-}
-
-.msg:not(.me) {
-  background: var(--incoming);
-  border-top-left-radius: 0;
-}
-.msg:not(.me):before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border: 8px solid transparent;
-  border-top-color: var(--incoming);
-  border-right-color: var(--incoming);
-  border-bottom: 0;
-}
-
-.msg .time {
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
-  margin-top: 4px;
-  float: right;
-  margin-left: 8px;
-}
-
-/* Composer */
-.composer {
-  background: var(--header);
-  padding: 8px 12px;
-  padding-bottom: calc(8px + var(--safe-bottom));
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  gap: 8px;
-}
-
-.composer input {
-  background: var(--input);
-  border-radius: 24px;
-  padding: 10px 16px;
-}
-
-/* Icons */
-.icon {
-  color: var(--muted);
-  padding: 10px;
-}
-.icon:hover { color: var(--text); }
-
-/* --- Modals --- */
-.modal {
-  background: rgba(0,0,0,0.85);
-  backdrop-filter: blur(2px);
-}
-.modal-card {
-  background: var(--card);
-  width: 85%;
-  border-radius: 18px;
-}
-
-/* --- Desktop/Tablet View overrides --- */
 @media (min-width: 900px) {
-  .sidebar { width: 350px; border-right: 1px solid var(--border); }
-  .chat {
-    position: relative;
-    transform: none; /* Always show on desktop */
-    width: calc(100% - 350px);
-  }
+  .sidebar { width: 350px; }
+  .chat { position: relative; transform: none; z-index: 0; width: 100%; }
   #btnBackMobile { display: none; }
-  #btnAddContactMain {
-    position: absolute; /* Inside header for desktop */
-    top: 12px; right: 12px; bottom: auto;
-    width: auto; height: auto;
-    border-radius: 8px; background: transparent;
-    box-shadow: none;
-    color: var(--accent);
-    font-size: 14px;
-  }
-  #btnAddContactMain::before { content: none; }
-  #btnAddContactMain { font-size: 14px; border: 1px solid var(--border); }
+  .fab { position: absolute; top: 16px; right: 16px; bottom: auto; width: 40px; height: 40px; font-size: 20px; }
 }
-
-/* Helper for loading spinner */
-.loading::after { border-color: rgba(0,0,0,0.1); border-top-color: var(--accent); }

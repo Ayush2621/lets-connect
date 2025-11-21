@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#202c33"> <link rel="shortcut icon" type="image/x-icon" href="icon.png">
+  <meta name="theme-color" content="#111b21">
   <title>Lets Connect</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="root">
 
+    <!-- AUTH SECTION -->
     <section id="authSection" class="screen auth-screen" role="region">
       <div class="auth-card">
         <div class="brand">
           <div class="logo">LC</div>
           <div class="brand-text">
-            <h1 style="font-weight:500; color: #e9edef;">Welcome</h1>
+            <h1>Welcome</h1>
             <p class="muted">Secure messaging • Calls</p>
           </div>
         </div>
@@ -25,26 +26,30 @@
           <button id="tabSignUp" class="tab" type="button">Sign Up</button>
         </div>
 
-        <form id="formSignIn" class="form">
-          <input id="signinEmail" type="email" placeholder="Email Address" />
-          <input id="signinPass" type="password" placeholder="Password" />
+        <!-- Added onsubmit="return false" to prevent page reload crashes -->
+        <form id="formSignIn" class="form" onsubmit="return false">
+          <input id="signinEmail" type="email" placeholder="Email Address" autocomplete="username" required />
+          <input id="signinPass" type="password" placeholder="Password" autocomplete="current-password" required />
           <button id="btnSignIn" class="btn primary" type="button">Log In</button>
+          <button id="btnSSO" class="btn ghost hidden" type="button">Google</button> <!-- Hidden if unused -->
         </form>
 
-        <form id="formSignUp" class="form hidden">
-          <input id="signupEmail" type="email" placeholder="Email Address" />
-          <input id="signupPass" type="password" placeholder="Create Password (min 6)" />
+        <form id="formSignUp" class="form hidden" onsubmit="return false">
+          <input id="signupEmail" type="email" placeholder="Email Address" autocomplete="email" required />
+          <input id="signupPass" type="password" placeholder="Create Password (min 6)" autocomplete="new-password" required />
           <button id="btnSignUp" class="btn primary" type="button">Create Account</button>
           <button id="btnDemo" class="btn ghost" style="margin-top:10px" type="button">Use Demo Account</button>
         </form>
       </div>
     </section>
 
+    <!-- PROFILE SECTION -->
     <section id="profileSection" class="screen hidden profile-screen">
       <div class="profile-card">
-        <h2 style="text-align:center; margin-bottom:30px;">Profile Info</h2>
+        <h2>Profile Info</h2>
         <div class="avatar-preview" id="avatarPreview">U</div>
-        <label class="file-label" style="text-align:center; display:block; color:var(--accent);">Tap to change photo
+        <label class="file-label" style="text-align:center; display:block; color:var(--accent);">
+          Tap to change photo
           <input id="profileAvatar" type="file" accept="image/*" style="display:none" />
         </label>
 
@@ -52,7 +57,8 @@
             <input id="profileName" placeholder="Enter your name" />
             <input id="profilePhone" placeholder="Phone number" />
             
-            <div id="profilePhoneDisplay" style="text-align:center; font-family:monospace; color:var(--muted)"></div>
+            <div style="text-align:center; font-size:12px; color:#8696a0; margin-top:5px;">Your ID</div>
+            <div id="profilePhoneDisplay" style="text-align:center; font-family:monospace; color:#e9edef; margin-bottom:10px;">—</div>
 
             <div class="row gap" style="justify-content:center; margin-top:10px;">
                 <button id="btnShowQr" class="btn-sm ghost" type="button">Show QR</button>
@@ -65,40 +71,44 @@
       </div>
     </section>
 
+    <!-- APP MAIN SECTION -->
     <section id="appSection" class="screen hidden app-screen">
       
+      <!-- LIST (Sidebar) -->
       <aside id="sidebarPanel" class="sidebar">
         <div class="sidebar-top">
           <div id="meAvatar" class="avatar-lg" style="width:40px; height:40px; font-size:16px;">U</div>
           <div class="me-meta" style="margin-left:10px;">
             <div id="meName" style="font-weight:600; font-size:16px;">You</div>
+            <div id="mePhone" class="muted small" style="font-size:12px;"></div>
           </div>
-          <button id="btnOpenProfile" class="icon" style="padding:8px;" type="button">
-             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          </button>
+          <button id="btnOpenProfile" class="icon" style="padding:8px;" type="button">⚙️</button>
         </div>
 
         <div class="controls" style="padding:10px;">
           <input id="contactSearch" placeholder="Search..." />
         </div>
         
-        <button id="btnAddContactMain" title="New Chat" type="button">New</button>
-        <button id="btnRefresh" class="btn-sm ghost hidden" type="button"></button>
+        <!-- Floating Action Button -->
+        <button id="btnAddContactMain" class="fab" title="New Chat" type="button">+</button>
+        <button id="btnRefresh" class="hidden" type="button"></button> <!-- Hidden refresh -->
 
         <div id="contactsList" class="contacts"></div>
       </aside>
 
+      <!-- CHAT PANEL -->
       <main id="chatPanel" class="chat">
         <div class="chat-header">
           <div class="chat-left">
-            <button id="btnBackMobile" type="button">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            <!-- Back Button -->
+            <button id="btnBackMobile" class="icon" type="button" style="margin-right:5px;">
+              ←
             </button>
             
             <div id="chatAvatar" class="avatar-md">U</div>
             <div style="margin-left:8px;">
               <div id="chatTitle" style="font-weight:600; font-size:16px;">Contact</div>
-              <div id="chatSubtitle" class="muted small" style="font-size:12px;">Online</div>
+              <div id="chatSubtitle" class="muted small" style="font-size:12px;"></div>
             </div>
           </div>
           <div class="chat-actions">
@@ -115,19 +125,20 @@
           <button id="btnAttachMain" class="icon" style="padding:6px;" type="button">📎</button>
           <input id="inputMessage" placeholder="Message" autocomplete="off" />
           <input id="attachFile" type="file" style="display:none" multiple />
-          <button id="btnSendMain" class="icon" style="background:var(--accent); color:#fff; border-radius:50%; width:40px; height:40px; padding:10px; margin-left:4px;" type="button">➤</button>
+          <button id="btnSendMain" class="send-btn" type="button">➤</button>
         </div>
         <div id="filePreview" class="file-preview"></div>
       </main>
     </section>
 
+    <!-- MODALS -->
     <div id="modalAddContact" class="modal hidden">
-      <div class="modal-card" style="padding:20px;">
-        <h3 style="margin-top:0;">New Chat</h3>
+      <div class="modal-card">
+        <h3>New Chat</h3>
         <input id="addContactName" placeholder="Name (Optional)" style="margin-bottom:10px;" />
         <input id="addContactPhone" placeholder="Phone Number" type="tel" />
         <div style="margin-top:15px; display:flex; gap:10px;">
-             <button id="btnFindByPhone" class="btn-sm ghost" style="flex:1" type="button">Search</button>
+             <button id="btnFindByPhone" class="btn-sm ghost" style="flex:1" type="button">Search User</button>
         </div>
         <div class="row gap right" style="margin-top:20px; justify-content:flex-end;">
           <button id="addContactCancel" class="btn ghost" type="button">Cancel</button>
@@ -137,7 +148,7 @@
     </div>
 
     <div id="modalQr" class="modal hidden">
-        <div class="modal-card" style="text-align:center; padding:20px;">
+        <div class="modal-card center-text">
           <h3>My Code</h3>
           <img id="qrImage" src="" style="width:200px; height:200px; border-radius:8px;" />
           <br/><br/>
@@ -146,7 +157,7 @@
     </div>
     
     <div id="modalQrScan" class="modal hidden">
-        <div class="modal-card" style="text-align:center; padding:20px;">
+        <div class="modal-card center-text">
           <h3>Scan Code</h3>
           <video id="qrVideo" autoplay playsinline style="width:100%; height:250px; background:#000; border-radius:8px; object-fit:cover;"></video>
           <br/><br/>
@@ -156,27 +167,31 @@
 
   </div>
 
+  <!-- Supabase Configuration -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+    
+    // Your configuration
     const SUPABASE_URL = 'https://ojspvwkoetgbgwycehpz.supabase.co'
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qc3B2d2tvZXRnYmd3eWNlaHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MTI0MzQsImV4cCI6MjA3OTE4ODQzNH0.AXPZu09ka2n3LlYQI4QDmToGqAcvuzjdx2po0b0ZI84'
+    
     window.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     window.VAPID_PUBLIC_KEY = 'BJRQH4EQkS9RdzMg0F1W28lN7i0k1R_3HdWcvUHoDsxDmsfMPFfhPyh5V2vPMYlCcKFSqRZP4HyI0cFpD3R2ywU';
   </script>
 
+  <!-- Main App Logic -->
   <script type="module" src="app.js"></script>
   
+  <!-- Mobile Back Button Logic -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
         const btnBack = document.getElementById('btnBackMobile');
         const chatPanel = document.getElementById('chatPanel');
-        
-        btnBack.addEventListener('click', () => {
-            // Slide chat away
-            chatPanel.style.transform = 'translateX(100%)'; 
-            // Optional: clear active contact highlight in list
-            document.querySelectorAll('.contact.active').forEach(el => el.classList.remove('active'));
-        });
+        if(btnBack && chatPanel) {
+            btnBack.addEventListener('click', () => {
+                chatPanel.classList.remove('active-screen');
+            });
+        }
     });
   </script>
 </body>

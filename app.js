@@ -1,5 +1,5 @@
 // app.js — full client (auth, profile, contacts, realtime chat, attachments, WebRTC, QR, Push)
-// NOTE: After login/profile save this registers service worker & subscribes for push (stores subscription in Supabase)
+// UPDATED: Fixes Login button not responding & adds Mobile Slide Animation
 'use strict';
 
 const supabase = window.supabase;
@@ -44,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAddContactMain = document.getElementById('btnAddContactMain');
   const btnRefresh = document.getElementById('btnRefresh');
   const contactsList = document.getElementById('contactsList');
+  
+  // Chat Panel Refs
+  const chatPanel = document.getElementById('chatPanel'); // New Ref for sliding
+  const btnBackMobile = document.getElementById('btnBackMobile'); // New Ref for back button
 
   const chatAvatar = document.getElementById('chatAvatar');
   const chatTitle = document.getElementById('chatTitle');
@@ -216,27 +220,80 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { console.error('loadSession err', err); showOnly('auth'); }
   }
 
+  /* --- UPDATED LOGIN LOGIC --- */
   btnSignUp.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; btnSignUp.disabled=true;
-    const email = (signupEmail.value||'').trim(), password = (signupPass.value||'').trim();
-    if (!email || password.length < 6) { alert('Enter valid email & password (min 6)'); authBusy=false; btnSignUp.disabled=false; return; }
+    if (authBusy) return; 
+    authBusy=true; 
+    const originalText = btnSignUp.textContent;
+    btnSignUp.textContent = 'Creating...';
+    btnSignUp.disabled=true;
+
+    const email = (signupEmail.value||'').trim();
+    const password = (signupPass.value||'').trim();
+    
+    if (!email || password.length < 6) { 
+        alert('Enter valid email & password (min 6)'); 
+        authBusy=false; 
+        btnSignUp.textContent = originalText;
+        btnSignUp.disabled=false; 
+        return; 
+    }
+    
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) { alert('Sign up error: ' + (error.message||JSON.stringify(error))); authBusy=false; btnSignUp.disabled=false; return; }
+    if (error) { 
+        alert('Sign up error: ' + (error.message||JSON.stringify(error))); 
+        authBusy=false; 
+        btnSignUp.textContent = originalText;
+        btnSignUp.disabled=false; 
+        return; 
+    }
     await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
     await loadSession();
+    
+    // Reset state if loadSession doesn't navigate
+    authBusy = false;
+    btnSignUp.textContent = originalText;
+    btnSignUp.disabled = false;
   });
 
   btnSignIn.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; btnSignIn.disabled=true;
-    const email = (signinEmail.value||'').trim(), password = (signinPass.value||'').trim();
-    if (!email || !password) { alert('Enter email & password'); authBusy=false; btnSignIn.disabled=false; return; }
+    if (authBusy) return; 
+    authBusy=true; 
+    const originalText = btnSignIn.textContent;
+    btnSignIn.textContent = 'Logging in...';
+    btnSignIn.disabled=true;
+
+    const email = (signinEmail.value||'').trim();
+    const password = (signinPass.value||'').trim();
+    
+    if (!email || !password) { 
+        alert('Enter email & password'); 
+        authBusy=false; 
+        btnSignIn.textContent = originalText;
+        btnSignIn.disabled=false; 
+        return; 
+    }
+    
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { alert('Sign in failed: ' + (error.message||JSON.stringify(error))); authBusy=false; btnSignIn.disabled=false; return; }
+    if (error) { 
+        alert('Sign in failed: ' + (error.message||JSON.stringify(error))); 
+        authBusy=false; 
+        btnSignIn.textContent = originalText;
+        btnSignIn.disabled=false; 
+        return; 
+    }
+    
     await loadSession();
+    // Reset state if loadSession doesn't navigate
+    authBusy = false;
+    btnSignIn.textContent = originalText;
+    btnSignIn.disabled = false;
   });
 
   btnDemo.addEventListener('click', async()=> {
-    if (authBusy) return; authBusy=true; btnDemo.disabled=true;
+    if (authBusy) return; 
+    authBusy=true; 
+    btnDemo.disabled=true;
     const email = `demo${Date.now()%10000}@example.com`, password = 'demopass';
     await supabase.auth.signUp({ email, password }).catch(()=>null);
     await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
@@ -341,6 +398,13 @@ document.addEventListener('DOMContentLoaded', () => {
     btnVideoCall.onclick = ()=> startCallWithActive(true);
     btnClearChat.onclick = clearConversation;
 
+    // MOBILE BACK BUTTON HANDLER (FIXED)
+    if(btnBackMobile) {
+        btnBackMobile.addEventListener('click', () => {
+            if (chatPanel) chatPanel.classList.remove('active-screen');
+        });
+    }
+
     // QR handlers
     if (btnShowQr) btnShowQr.addEventListener('click', ()=> {
       const phone = myProfile?.phone || profilePhone.value || '';
@@ -354,7 +418,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (qrClose) qrClose.addEventListener('click', ()=> hide(modalQr));
 
     if (btnScanQr) btnScanQr.addEventListener('click', async ()=> {
-      // fallback to manual paste if BarcodeDetector not available
       if (!('BarcodeDetector' in window)) {
         const pasted = prompt('Paste QR text / phone here (format: full URL with ?addPhone=... or raw phone):');
         if (!pasted) return;
@@ -389,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (qrScanClose) qrScanClose.addEventListener('click', ()=> { stopScanner(); hide(modalQrScan); });
 
-    // register service worker & subscribe if not already done
     registerServiceWorkerAndSubscribe().catch(e=>console.warn('push register err', e));
   }
 
@@ -402,13 +464,11 @@ document.addEventListener('DOMContentLoaded', () => {
     chatAvatar.textContent = (contact.name && contact.name[0]) ? contact.name[0].toUpperCase() : 'U';
     messages.innerHTML = '<div class="muted small">Loading conversation...</div>';
     
-    // --- UI CHANGE FOR WEBVIEW ---
-    // Instead of hiding sidebar, we slide the chat over it
-    const chatPanel = document.getElementById('chatPanel');
+    // --- UPDATED: SLIDE ANIMATION FOR MOBILE ---
     if (window.innerWidth < 900) {
-       chatPanel.style.transform = 'translateX(0)';
+        if(chatPanel) chatPanel.classList.add('active-screen');
     }
-    // -----------------------------
+    // -------------------------------------------
 
     const conv = convIdFor(currentUser.id, contact.contact_user);
     try {
@@ -484,34 +544,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------- messages ---------- */
-  async function selectContact(contact) {
-    if (!contact.contact_user) return alert('Contact is not a registered user yet. They must register (use the same phone) to chat.');
-    activeContact = contact;
-    chatTitle.textContent = contact.name || 'Contact';
-    chatSubtitle.textContent = contact.phone || '';
-    chatAvatar.textContent = (contact.name && contact.name[0]) ? contact.name[0].toUpperCase() : 'U';
-    messages.innerHTML = '<div class="muted small">Loading conversation...</div>';
-    if (isMobile()) { hide(document.querySelector('.sidebar')); show(document.querySelector('.chat')); }
-
-    const conv = convIdFor(currentUser.id, contact.contact_user);
-    try {
-      const { data } = await supabase.from('conversations').select('*').eq('id', conv).limit(1).maybeSingle();
-      if (!data) await supabase.from('conversations').insert([{ id: conv }]);
-      const { data: msgs } = await supabase.from('messages').select('*').eq('conversation_id', conv).order('created_at', { ascending: true }).limit(500);
-      messages.innerHTML = '';
-      if (msgs && msgs.length) for (const m of msgs) await renderMessageRow(m); else messages.innerHTML = '<div class="muted small">No messages yet</div>';
-      if (messageSub && messageSub.unsubscribe) messageSub.unsubscribe();
-      messageSub = supabase.channel('messages_'+conv).on('postgres_changes', { event:'INSERT', schema:'public', table:'messages', filter:`conversation_id=eq.${conv}` }, payload => {
-        if (payload && payload.new && payload.new.from_user !== currentUser.id) {
-          // play local sound
-          playNotification();
-          // page-visible push will be handled by service worker if in background
-        }
-        renderMessageRow(payload.new); messages.scrollTop = messages.scrollHeight;
-      }).subscribe();
-    } catch (err) { console.error(err); messages.innerHTML = '<div class="muted small">Could not load messages</div>'; }
-  }
-
   async function renderMessageRow(m) {
     if (!m) return;
     const me = (m.from_user === currentUser.id);
