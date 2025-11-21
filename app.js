@@ -7,6 +7,11 @@
   - Ringtone with local fallback (/mnt/data/ringtone.ogg) and remote fallback
   - Robust ICE signaling via Supabase 'calls' table (offer/answer/ice/reject/cancel)
   - Minimal changes to other app logic / DOM ids (preserved)
+  
+  FIXES APPLIED:
+  1. Updated ICE_SERVERS to use multiple Google STUN servers.
+  2. Added iceCandidatesQueue to fix "ICE Race Condition" (candidates arriving before offer).
+  3. Fixed 'ontrack' to prevent video resetting/black screen.
 */
 
 /* -------------------- CONFIG / GLOBALS -------------------- */
@@ -18,17 +23,14 @@ if (!supabase) {
   throw new Error('Supabase missing');
 }
 
-// Optional: add TURN servers here if needed (WhatsApp uses TURN for NAT traversal in some networks).
-// Example: { urls: 'turn:yourturnserver:3478', username: 'user', credential: 'pass' }
+// FIX 1: Reliable STUN servers
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
-
-  // ✅ Your TURN server (required for stable calls)
-  {
-    urls: 'turn:turn.example.com:3478',
-    username: 'd705dbea1fdf38d37acf4c14',
-    credential: 'SOamfiXKs3H4hPNB'
-  }
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' }
+  // NOTE: For production (Mobile Data/different Wifis), you MUST add a TURN server here.
 ];
 
 
@@ -51,6 +53,9 @@ let remoteStream = null;       // single MediaStream for incoming audio+video
 let callsChannel = null;
 let currentCallId = null;
 let scannerStream = null;
+
+// FIX 2: Queue for ICE candidates that arrive before connection is ready
+let iceCandidatesQueue = []; 
 
 const BEEP_SOUND = new Audio("data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgRYWFgAAAAwAAADbWlub3JfdmVyc2lvbgAwAFRYWFgAAAAkAAADY29tcGF0aWJsZV9icmFuZHMAbXA0Mmlzb21tcDQx//uQZAAAAAAA0AAAAABAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcYAAAAAAABAAAIMwAAAAAS");
 
@@ -118,8 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* -------------------- AUTH / PROFILE / CONTACTS / CHAT -------------------- */
-/* NOTE: These functions are preserved from your app; I include full versions
-   so this file is self-contained. They were not changed except where noted. */
 
 async function checkSession() {
   try {
@@ -349,20 +352,14 @@ function renderMessage(msg) {
 
 /* -------------------- CALLING SYSTEM (WhatsApp-like) -------------------- */
 
-/*
-  Signaling DB schema expectation (table 'calls'):
-  - call_id (string)
-  - from_user (user id)
-  - to_user (user id)
-  - type (offer | answer | ice | reject | cancel)
-  - payload (json or text)
-*/
-
 /* START A CALL (caller flow) */
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact who is registered');
   const remoteId = activeContact.contact_user;
   currentCallId = `call_${Date.now()}`;
+  
+  // Clean queue
+  iceCandidatesQueue = [];
 
   // Create RTCPeerConnection with configured ICE servers
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -387,15 +384,23 @@ async function startCallAction(video) {
   // create remoteStream placeholder
   remoteStream = new MediaStream();
 
-  // ensure remote tracks get added reliably
+  // FIX 3: Correct track handling to not reset video element
   pc.ontrack = (e) => {
     if (!remoteStream) remoteStream = new MediaStream();
-    try { remoteStream.addTrack(e.track); } catch (ex) { console.warn('addTrack failed', ex); }
+    
+    // Only add if track not present
+    if (!remoteStream.getTracks().find(t => t.id === e.track.id)) {
+        remoteStream.addTrack(e.track);
+    }
+
     const rv = document.getElementById('remoteVideo');
     if (rv) {
-      rv.srcObject = remoteStream;
-      rv.muted = false;
-      rv.volume = 1;
+      // Avoid resetting srcObject if it's the same stream
+      if (rv.srcObject !== remoteStream) {
+         rv.srcObject = remoteStream;
+         rv.muted = false;
+         rv.volume = 1;
+      }
       try { rv.play().catch(()=>{}); } catch(e){}
     } else {
       showRemoteVideo(remoteStream);
@@ -442,12 +447,15 @@ async function startCallAction(video) {
   }
 }
 
-/* LISTEN TO SIGNALS FOR A SPECIFIC CALL */
+/* LISTEN TO SIGNALS FOR A SPECIFIC CALL - FIX 2 Implementation */
 function enhancedListenToCallEvents(callId) {
   if (callsChannel) {
     try { callsChannel.unsubscribe(); } catch(e) {}
     callsChannel = null;
   }
+  
+  // Reset queue when starting to listen
+  iceCandidatesQueue = [];
 
   callsChannel = supabase.channel('call_' + callId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
@@ -476,14 +484,35 @@ function enhancedListenToCallEvents(callId) {
           const desc = { type: payload.type, sdp: payload.sdp };
           await pc.setRemoteDescription(new RTCSessionDescription(desc));
           removeOutgoingCallingUI(); stopRinging();
+          
+          // PROCESS QUEUED CANDIDATES
+          processIceQueue();
+          
         } else if (row.type === 'ice' && pc) {
           const candidate = payload.candidate || payload;
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          const ice = new RTCIceCandidate(candidate);
+          
+          // Only add if remote description is ready
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+              try { await pc.addIceCandidate(ice); } catch(e) { console.warn('Add ICE fail', e); }
+          } else {
+              // Queue it for later
+              iceCandidatesQueue.push(ice);
+          }
         }
       } catch (e) {
         console.warn('Signal handling error', e);
       }
     }).subscribe();
+}
+
+async function processIceQueue() {
+    if (!pc || iceCandidatesQueue.length === 0) return;
+    console.log(`Processing ${iceCandidatesQueue.length} queued candidates`);
+    for (const c of iceCandidatesQueue) {
+        try { await pc.addIceCandidate(c); } catch(e) {}
+    }
+    iceCandidatesQueue = [];
 }
 
 /* GLOBAL SUBSCRIPTION FOR OFFERS DIRECTED AT CURRENT USER */
@@ -496,12 +525,8 @@ function subscribeToGlobalEvents() {
       if (row.type === 'offer') {
         // Show incoming popup (do not auto-accept)
         showIncomingCallPopup(row);
-      } else if (row.type === 'ice') {
-        const payload = (typeof row.payload === 'string') ? JSON.parse(row.payload) : row.payload;
-        if (pc && row.call_id === currentCallId && payload) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(payload.candidate || payload)); } catch(e) {}
-        }
-      }
+      } 
+      // Note: granular ICE handling is better done in enhancedListenToCallEvents to avoid race conditions
     })
     // Also keep message notifications
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
@@ -519,6 +544,8 @@ async function handleIncomingCall(row) {
   // Called when user Accepts incoming popup
   playTone('receive');
   currentCallId = row.call_id;
+  // Initialize queue
+  iceCandidatesQueue = [];
   enhancedListenToCallEvents(currentCallId);
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -545,14 +572,21 @@ async function handleIncomingCall(row) {
   remoteStream = new MediaStream();
   showRemoteVideo(null);
 
+  // FIX 3: Correct track handling
   pc.ontrack = (e) => {
     if (!remoteStream) remoteStream = new MediaStream();
-    try { remoteStream.addTrack(e.track); } catch (ex) { console.warn('addTrack fail', ex); }
+    
+    if (!remoteStream.getTracks().find(t => t.id === e.track.id)) {
+        remoteStream.addTrack(e.track);
+    }
+
     const remoteEl = document.getElementById('remoteVideo');
     if (remoteEl) {
-      remoteEl.srcObject = remoteStream;
-      remoteEl.muted = false;
-      remoteEl.volume = 1.0;
+      if (remoteEl.srcObject !== remoteStream) {
+         remoteEl.srcObject = remoteStream;
+         remoteEl.muted = false;
+         remoteEl.volume = 1.0;
+      }
       try { remoteEl.play().catch(()=>{}); } catch(e) {}
     }
   };
@@ -574,6 +608,9 @@ async function handleIncomingCall(row) {
   try {
     const offerDesc = (typeof offerPayload === 'object') ? offerPayload : JSON.parse(String(row.payload));
     await pc.setRemoteDescription(new RTCSessionDescription({ type: offerDesc.type, sdp: offerDesc.sdp }));
+    
+    // FIX 2: Process queue immediately after setting remote desc
+    processIceQueue();
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -586,6 +623,7 @@ async function handleIncomingCall(row) {
       payload: JSON.stringify(answer)
     }]);
 
+    // Re-confirm listening
     enhancedListenToCallEvents(currentCallId);
   } catch (err) {
     alert('Call setup failed: ' + (err.message || err));
@@ -631,6 +669,7 @@ function cleanupCallResources() {
   try { if (callsChannel) callsChannel.unsubscribe(); } catch(e) {}
   callsChannel = null;
   currentCallId = null;
+  iceCandidatesQueue = []; // clear queue
   const rv = document.getElementById('remoteVideo'); if (rv) rv.remove();
   const btn = document.getElementById('endCallBtn'); if (btn) btn.remove();
   const out = document.getElementById('outgoingCallUI'); if (out) out.remove();
@@ -645,10 +684,6 @@ function endCall() {
 
 /* -------------------- RINGTONE + UI -------------------- */
 
-/*
-  For apps (packaged/capacitor), include a local ringtone at /mnt/data/ringtone.ogg
-  so sound plays without network. If absent, remote fallback will be used.
-*/
 let ringtone = null;
 function ensureRingtone() {
   if (ringtone) return;
@@ -844,6 +879,4 @@ window.startCallAction = startCallAction;
 window.endCall = endCall;
 window.subscribeToGlobalEvents = subscribeToGlobalEvents;
 window.cleanupCallResources = cleanupCallResources;
-console.log('app.js loaded —  calling enabled (incoming popup, outgoing UI, ringtone).');
-
-
+console.log('app.js loaded — calling enabled (incoming popup, outgoing UI, ringtone).');
