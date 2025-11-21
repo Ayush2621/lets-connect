@@ -25,7 +25,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = await req.json();
+    // --- FIX: Use req.body instead of await req.json() ---
+    // Vercel automatically parses JSON bodies in the Node.js runtime
+    const body = req.body; 
+    
+    // Optional: Safety check if body is somehow null (e.g. forgot Content-Type header)
+    if (!body) {
+       return res.status(400).json({ error: "No request body found" });
+    }
+
     const { toUserId, title, message } = body;
 
     if (!toUserId) {
