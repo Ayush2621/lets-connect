@@ -1,5 +1,5 @@
 // app.js — full client (auth, profile, contacts, realtime chat, attachments, WebRTC, QR, Push)
-// UPDATED: Fixes Login button not responding & adds Mobile Slide Animation
+// FIXED: Added missing 'loadContacts' function to fix the ReferenceError
 'use strict';
 
 const supabase = window.supabase;
@@ -46,8 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const contactsList = document.getElementById('contactsList');
   
   // Chat Panel Refs
-  const chatPanel = document.getElementById('chatPanel'); // New Ref for sliding
-  const btnBackMobile = document.getElementById('btnBackMobile'); // New Ref for back button
+  const chatPanel = document.getElementById('chatPanel'); 
+  const btnBackMobile = document.getElementById('btnBackMobile');
 
   const chatAvatar = document.getElementById('chatAvatar');
   const chatTitle = document.getElementById('chatTitle');
@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* ---------- signed url helper (tries serverless then public) ---------- */
+  /* ---------- signed url helper ---------- */
   async function getSignedUrl(bucket, path, expires = 3600) {
     try {
       const s = await supabase.auth.getSession();
@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch(e){ return null; }
   }
 
-  /* ---------- push (service worker + subscription) ---------- */
+  /* ---------- push (service worker) ---------- */
   async function registerServiceWorkerAndSubscribe() {
     if (!('serviceWorker' in navigator)) { console.warn('No service worker support'); return null; }
     try {
@@ -220,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { console.error('loadSession err', err); showOnly('auth'); }
   }
 
-  /* --- UPDATED LOGIN LOGIC --- */
   btnSignUp.addEventListener('click', async()=> {
     if (authBusy) return; 
     authBusy=true; 
@@ -250,7 +249,6 @@ document.addEventListener('DOMContentLoaded', () => {
     await supabase.auth.signInWithPassword({ email, password }).catch(()=>null);
     await loadSession();
     
-    // Reset state if loadSession doesn't navigate
     authBusy = false;
     btnSignUp.textContent = originalText;
     btnSignUp.disabled = false;
@@ -284,7 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     await loadSession();
-    // Reset state if loadSession doesn't navigate
     authBusy = false;
     btnSignIn.textContent = originalText;
     btnSignIn.disabled = false;
@@ -338,7 +335,6 @@ document.addEventListener('DOMContentLoaded', () => {
       myProfile = toUpsert;
       showOnly('app');
       await bootMain();
-      // register SW & subscribe for push after profile saved
       registerServiceWorkerAndSubscribe().catch(e=>console.warn('push register err', e));
     } catch (err) { console.error('save profile err', err); alert('Profile save failed'); }
     finally { btnSaveProfile.disabled = false; }
@@ -380,6 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
       else meAvatar.textContent = (myProfile.username||'U')[0].toUpperCase();
     } else meAvatar.textContent = (myProfile.username||'U')[0].toUpperCase();
 
+    // This line caused the error before because loadContacts was missing. 
+    // It is now defined below.
     await loadContacts();
 
     btnOpenProfile.onclick = ()=> { profileName.value = myProfile.username || ''; profilePhone.value = myProfile.phone || ''; showOnly('profile'); };
@@ -398,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnVideoCall.onclick = ()=> startCallWithActive(true);
     btnClearChat.onclick = clearConversation;
 
-    // MOBILE BACK BUTTON HANDLER (FIXED)
+    // MOBILE BACK BUTTON HANDLER
     if(btnBackMobile) {
         btnBackMobile.addEventListener('click', () => {
             if (chatPanel) chatPanel.classList.remove('active-screen');
@@ -455,7 +453,46 @@ document.addEventListener('DOMContentLoaded', () => {
     registerServiceWorkerAndSubscribe().catch(e=>console.warn('push register err', e));
   }
 
-  /* ---------- contacts ---------- */
+  /* ---------- contacts (RESTORED FUNCTION) ---------- */
+  async function loadContacts() {
+    contactsList.innerHTML = '<div class="muted small" style="padding:16px; text-align:center">Loading...</div>';
+    try {
+      const { data, error } = await supabase.from('contacts').select('*').eq('owner', currentUser.id).order('created_at', { ascending: true });
+      if (error) throw error;
+      myContacts = data || [];
+      renderContacts();
+    } catch (err) { 
+        console.warn(err); 
+        contactsList.innerHTML = '<div class="muted small" style="padding:16px; text-align:center">Could not load contacts</div>'; 
+    }
+  }
+
+  function renderContacts(filter='') {
+    contactsList.innerHTML = '';
+    if (!myContacts || myContacts.length === 0) { 
+        contactsList.innerHTML = '<div class="muted small" style="padding:16px; text-align:center">No contacts. Click + to add.</div>'; 
+        return; 
+    }
+    const q = (filter||'').trim().toLowerCase();
+    for (const c of myContacts) {
+      const name = c.name || (c.contact_user || c.phone || 'Contact');
+      if (q && !(name.toLowerCase().includes(q) || (c.phone||'').includes(q))) continue;
+      
+      const node = document.createElement('div'); 
+      node.className = 'contact' + (activeContact && activeContact.id === c.id ? ' active' : '');
+      
+      node.innerHTML = `
+        <div class="avatar">${(name[0]||'C').toUpperCase()}</div>
+        <div style="flex:1">
+          <div style="font-weight:600; font-size:16px; color:#e9edef;">${escapeHtml(name)}</div>
+          <div class="muted small">${escapeHtml(c.phone || (c.contact_user || ''))}</div>
+        </div>`;
+      
+      node.onclick = ()=> selectContact(c);
+      contactsList.appendChild(node);
+    }
+  }
+
   async function selectContact(contact) {
     if (!contact.contact_user) return alert('Contact is not a registered user yet. They must register (use the same phone) to chat.');
     activeContact = contact;
@@ -464,11 +501,10 @@ document.addEventListener('DOMContentLoaded', () => {
     chatAvatar.textContent = (contact.name && contact.name[0]) ? contact.name[0].toUpperCase() : 'U';
     messages.innerHTML = '<div class="muted small">Loading conversation...</div>';
     
-    // --- UPDATED: SLIDE ANIMATION FOR MOBILE ---
+    // SLIDE ANIMATION (Logic restored)
     if (window.innerWidth < 900) {
         if(chatPanel) chatPanel.classList.add('active-screen');
     }
-    // -------------------------------------------
 
     const conv = convIdFor(currentUser.id, contact.contact_user);
     try {
@@ -476,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!data) await supabase.from('conversations').insert([{ id: conv }]);
       const { data: msgs } = await supabase.from('messages').select('*').eq('conversation_id', conv).order('created_at', { ascending: true }).limit(500);
       messages.innerHTML = '';
-      if (msgs && msgs.length) for (const m of msgs) await renderMessageRow(m); else messages.innerHTML = '<div class="muted small">No messages yet</div>';
+      if (msgs && msgs.length) for (const m of msgs) await renderMessageRow(m); else messages.innerHTML = '<div class="muted small" style="text-align:center; padding:20px;">No messages yet</div>';
       if (messageSub && messageSub.unsubscribe) messageSub.unsubscribe();
       messageSub = supabase.channel('messages_'+conv).on('postgres_changes', { event:'INSERT', schema:'public', table:'messages', filter:`conversation_id=eq.${conv}` }, payload => {
         if (payload && payload.new && payload.new.from_user !== currentUser.id) {
@@ -485,24 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderMessageRow(payload.new); messages.scrollTop = messages.scrollHeight;
       }).subscribe();
     } catch (err) { console.error(err); messages.innerHTML = '<div class="muted small">Could not load messages</div>'; }
-  }
-
-  function renderContacts(filter='') {
-    contactsList.innerHTML = '';
-    if (!myContacts || myContacts.length === 0) { contactsList.innerHTML = '<div class="muted small">No contacts. Add someone to start chatting.</div>'; return; }
-    const q = (filter||'').trim().toLowerCase();
-    for (const c of myContacts) {
-      const name = c.name || (c.contact_user || c.phone || 'Contact');
-      if (q && !(name.toLowerCase().includes(q) || (c.phone||'').includes(q))) continue;
-      const node = document.createElement('div'); node.className = 'contact' + (activeContact && activeContact.id === c.id ? ' active' : '');
-      node.innerHTML = `<div class="avatar">${(name[0]||'C').toUpperCase()}</div>
-        <div style="flex:1">
-          <div style="font-weight:600">${escapeHtml(name)}</div>
-          <div class="muted small">${escapeHtml(c.phone || (c.contact_user || ''))}</div>
-        </div>`;
-      node.onclick = ()=> selectContact(c);
-      contactsList.appendChild(node);
-    }
   }
 
   function openAddContactModal(){ addContactName.value=''; addContactPhone.value=''; modalAddContact.classList.remove('hidden'); }
@@ -620,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (error) throw error;
       inputMessage.value = '';
 
-      // trigger server push to recipient (server must be deployed)
+      // trigger server push to recipient
       try {
         fetch('/api/send-push', {
           method: 'POST',
