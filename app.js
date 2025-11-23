@@ -485,7 +485,7 @@ function endCall() {
 let ringtone = null;
 function ensureRingtone() {
   if (ringtone) return; ringtone = document.createElement('audio');
-  ringtone.src = '/rington.mp3';
+  ringtone.src = "public/rington.mp3";
   ringtone.loop = true;
 }
 function stopRinging() { if (ringtone) { ringtone.pause(); ringtone.currentTime = 0; } }
