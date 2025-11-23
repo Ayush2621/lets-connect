@@ -289,12 +289,13 @@ async function startCallAction(video) {
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
-// Pre‑declare transceivers to fix m‑line order
-pc.addTransceiver('audio', { direction: 'sendrecv' });
-pc.addTransceiver('video', { direction: 'sendrecv' });
+
+  // Pre‑declare transceivers to lock m‑line order
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  pc.addTransceiver('video', { direction: 'sendrecv' });
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: !!video, audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !!video });
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
@@ -302,9 +303,9 @@ pc.addTransceiver('video', { direction: 'sendrecv' });
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
-   // Always add audio first, then video
-localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
+    // Always add audio first, then video
+    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+    localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked! Check browser permissions.");
   }
@@ -339,9 +340,10 @@ function setupPCListeners() {
       remoteEl.srcObject = remoteStream;
     }
     remoteEl.onloadedmetadata = () => remoteEl.play().catch(()=>{});
+
     // When remote stream arrives, remove "Calling..." UI
-const o = get('outgoingCallUI');
-if (o) o.remove();
+    const o = get('outgoingCallUI');
+    if (o) o.remove();
   };
 
   pc.onicecandidate = async (e) => {
@@ -356,6 +358,7 @@ if (o) o.remove();
     }]);
   };
 }
+
 
 function enhancedListenToCallEvents(callId) {
   if (callsChannel) { 
@@ -377,11 +380,10 @@ function enhancedListenToCallEvents(callId) {
       }
 
       if (row.type === 'answer' && pc) {
-        // ✅ Set remote description when callee answers
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
         processIceQueue();
 
-        // ✅ Update outgoing UI from "Calling..." to "Connected"
+        // Update outgoing UI to "Connected"
         const o = get('outgoingCallUI');
         if (o) {
           o.innerHTML = `<div style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
@@ -405,7 +407,6 @@ function enhancedListenToCallEvents(callId) {
       }
     }).subscribe();
 }
-
 
 
 function subscribeToGlobalEvents() {
