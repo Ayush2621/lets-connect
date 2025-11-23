@@ -340,16 +340,24 @@ async function startCallAction(video) {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
 
-  // Transceivers: audio first, optional video
-  pc.addTransceiver('audio', { direction: 'sendrecv' });
-  if (video) pc.addTransceiver('video', { direction: 'sendrecv' });
+  // Stabilize m-line order: create transceivers first (audio, optional video)
+  const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+  const videoTransceiver = video ? pc.addTransceiver('video', { direction: 'sendrecv' }) : null;
 
   try {
+    // Get local media and bind to transceivers via replaceTrack (not addTrack)
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !!video });
+
     const localEl = get('localVideo');
     if (localEl) { localEl.srcObject = localStream; localEl.muted = true; localEl.autoplay = true; localEl.playsInline = true; }
-    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-    if (video) localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
+
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack && audioTransceiver?.sender) await audioTransceiver.sender.replaceTrack(audioTrack);
+
+    if (video) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack && videoTransceiver?.sender) await videoTransceiver.sender.replaceTrack(videoTrack);
+    }
   } catch (err) {
     return alert('Camera/Mic blocked! Check browser permissions.');
   }
@@ -366,19 +374,22 @@ async function startCallAction(video) {
     cleanupCallResources();
   }
 }
+
 function setupPCListeners() {
   pc.ontrack = (e) => {
     const remoteEl = get('remoteVideo') || createRemoteVideoElement();
-    if (e.streams && e.streams[0]) {
-      remoteEl.srcObject = e.streams[0];
-    } else {
-      if (!remoteStream) remoteStream = new MediaStream();
-      remoteStream.addTrack(e.track);
-      remoteEl.srcObject = remoteStream;
-    }
+
+    const stream = (e.streams && e.streams[0])
+      ? e.streams[0]
+      : (() => { if (!remoteStream) remoteStream = new MediaStream(); remoteStream.addTrack(e.track); return remoteStream; })();
+
+    remoteEl.srcObject = stream;
     remoteEl.muted = false;
+    remoteEl.autoplay = true;
+    remoteEl.playsInline = true;
     remoteEl.onloadedmetadata = () => remoteEl.play().catch(()=>{});
-    get('outgoingCallUI')?.remove();
+
+    updateOutgoingUIConnected();
     stopRinging();
   };
 
@@ -388,14 +399,15 @@ function setupPCListeners() {
   };
 
   pc.onconnectionstatechange = () => {
-  if (!pc) return; // prevent null access
-  const st = pc.connectionState;
-  if (st === 'failed' || st === 'closed' || st === 'disconnected') {
-    cleanupCallResources();
-  }
-};
-
+    if (!pc) return; // prevent null access
+    const st = pc.connectionState;
+    if (st === 'connected') updateOutgoingUIConnected();
+    if (st === 'failed' || st === 'closed' || st === 'disconnected') {
+      cleanupCallResources();
+    }
+  };
 }
+
 function enhancedListenToCallEvents(callId) {
   if (callsChannel) { try { callsChannel.unsubscribe(); } catch(e){} }
   callsChannel = supabase.channel('call_' + callId)
@@ -412,13 +424,17 @@ function enhancedListenToCallEvents(callId) {
         updateOutgoingUIConnected();
       } else if (row.type === 'ice' && pc) {
         const ice = new RTCIceCandidate(payload);
-        if (pc.remoteDescription) await pc.addIceCandidate(ice);
-        else iceCandidatesQueue.push(ice);
+        if (pc.remoteDescription) {
+          try { await pc.addIceCandidate(ice); } catch(e){}
+        } else {
+          iceCandidatesQueue.push(ice);
+        }
       } else if (row.type === 'cancel' || row.type === 'reject') {
         cleanupCallResources();
       }
     }).subscribe();
 }
+
 async function handleIncomingCall(row) {
   currentCallId = row.call_id;
   currentRemoteUser = row.from_user;
@@ -431,29 +447,42 @@ async function handleIncomingCall(row) {
   if (typeof offerPayload === 'string') { try { offerPayload = JSON.parse(offerPayload); } catch(e){} }
   const offerHasVideo = !!(offerPayload && offerPayload.sdp && offerPayload.sdp.includes('\nm=video'));
 
-  pc.addTransceiver('audio', { direction: 'sendrecv' });
-  if (offerHasVideo) pc.addTransceiver('video', { direction: 'sendrecv' });
+  // Mirror transceivers
+  const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+  const videoTransceiver = offerHasVideo ? pc.addTransceiver('video', { direction: 'sendrecv' }) : null;
 
   try {
+    // Add local tracks BEFORE answering, and bind with replaceTrack
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: offerHasVideo });
-    const localEl = get('localVideo'); if (localEl) { localEl.srcObject = localStream; localEl.muted = true; localEl.autoplay = true; localEl.playsInline = true; }
-    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-    if (offerHasVideo) localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
-  } catch (err) { return alert('Camera/Mic blocked!'); }
+
+    const localEl = get('localVideo');
+    if (localEl) { localEl.srcObject = localStream; localEl.muted = true; localEl.autoplay = true; localEl.playsInline = true; }
+
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack && audioTransceiver?.sender) await audioTransceiver.sender.replaceTrack(audioTrack);
+
+    if (offerHasVideo) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack && videoTransceiver?.sender) await videoTransceiver.sender.replaceTrack(videoTrack);
+    }
+  } catch (err) {
+    return alert('Camera/Mic blocked!');
+  }
 
   createRemoteVideoElement();
 
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(offerPayload));
-    stopRinging();
     processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
+    stopRinging();
   } catch (err) {
     console.warn('ANSWER ERROR:', err);
   }
 }
+
 async function processIceQueue() {
   if (!pc) return;
   for (const c of iceCandidatesQueue) { try { await pc.addIceCandidate(c); } catch(e){} }
@@ -461,6 +490,7 @@ async function processIceQueue() {
 }
 
 /* Call UI + teardown */
+
 function showIncomingCallPopup(row) {
   if (get('incomingCallModal')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
@@ -478,6 +508,7 @@ function showIncomingCallPopup(row) {
   const a = get('btnAccept'); if (a) a.onclick = () => { stopRinging(); modal.remove(); handleIncomingCall(row); };
   const d = get('btnDecline'); if (d) d.onclick = () => { stopRinging(); modal.remove(); };
 }
+
 function showOutgoingCallingUI() {
   if (get('outgoingCallUI')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
@@ -489,11 +520,13 @@ function showOutgoingCallingUI() {
   document.body.appendChild(wrap);
   get('btnCancelCall')?.addEventListener('click', endCall);
 }
+
 function updateOutgoingUIConnected() {
   const status = document.getElementById('callStatusText');
   if (status) status.textContent = 'Connected';
   stopRinging();
 }
+
 function createRemoteVideoElement() {
   let v = get('remoteVideo'); if (v) return v;
   v = document.createElement('video');
@@ -511,18 +544,7 @@ function createRemoteVideoElement() {
 
   return v;
 }
-function cleanupCallResources() {
-  try { pc?.close(); } catch(e){} pc = null;
-  try { localStream?.getTracks().forEach(t => t.stop()); } catch(e){} localStream = null;
-  try { remoteStream?.getTracks().forEach(t => t.stop()); } catch(e){} remoteStream = null;
-  try { callsChannel?.unsubscribe(); } catch(e){}
-  currentCallId = null; currentRemoteUser = null; iceCandidatesQueue = [];
-  get('remoteVideo')?.remove();
-  get('endCallBtn')?.remove();
-  get('outgoingCallUI')?.remove();
-  get('incomingCallModal')?.remove();
-  stopRinging();
-}
+
 async function endCall() {
   if (currentCallId && currentRemoteUser) {
     const { error } = await supabase
@@ -534,13 +556,11 @@ async function endCall() {
         type: 'cancel',
         payload: '{}'
       }]);
-
-    if (error) {
-      console.error('Error sending cancel:', error.message);
-    }
+    if (error) console.error('Error sending cancel:', error.message);
   }
   cleanupCallResources();
 }
+
 
 /* Ringtone, QR, misc */
 function ensureRingtone() {
