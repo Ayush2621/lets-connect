@@ -280,6 +280,8 @@ function renderMessage(msg) {
 
 /* -------------------- CALLING LOGIC -------------------- */
 
+/* -------------------- CALLING LOGIC -------------------- */
+
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
   
@@ -295,6 +297,7 @@ async function startCallAction(video) {
   pc.addTransceiver('video', { direction: 'sendrecv' });
 
   try {
+    // Caller requests audio + video consistently
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !!video });
     const localEl = get('localVideo');
     if (localEl) {
@@ -359,7 +362,6 @@ function setupPCListeners() {
   };
 }
 
-
 function enhancedListenToCallEvents(callId) {
   if (callsChannel) { 
     try { callsChannel.unsubscribe(); } catch(e) {} 
@@ -408,20 +410,6 @@ function enhancedListenToCallEvents(callId) {
     }).subscribe();
 }
 
-
-function subscribeToGlobalEvents() {
-  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
-  globalSub = supabase.channel('user_global_' + currentUser.id)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
-      if (row && row.type === 'offer') {
-        currentRemoteUser = row.from_user; 
-        showIncomingCallPopup(row);
-        if (navigator.vibrate) navigator.vibrate([200,100,200]);
-        ensureRingtone(); try { ringtone.play(); } catch(e){}
-      }
-    }).subscribe();
-}
-
 async function handleIncomingCall(row) {
   currentCallId = row.call_id;
   currentRemoteUser = row.from_user; 
@@ -429,16 +417,17 @@ async function handleIncomingCall(row) {
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
-  // Pre‑declare transceivers to fix m‑line order
-pc.addTransceiver('audio', { direction: 'sendrecv' });
-pc.addTransceiver('video', { direction: 'sendrecv' });
 
+  // Pre‑declare transceivers to lock m‑line order
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  pc.addTransceiver('video', { direction: 'sendrecv' });
 
   let offerPayload = row.payload;
   if (typeof offerPayload === 'string') try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // Callee requests audio + video consistently
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
@@ -447,9 +436,8 @@ pc.addTransceiver('video', { direction: 'sendrecv' });
       localEl.playsInline = true;
     }
     // Always add audio first, then video
-localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
-
+    localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+    localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked!");
   }
@@ -478,7 +466,6 @@ async function processIceQueue() {
   for (const c of iceCandidatesQueue) await pc.addIceCandidate(c);
   iceCandidatesQueue = [];
 }
-
 
 /* -------------------- UI ELEMENTS -------------------- */
 function createRemoteVideoElement() {
