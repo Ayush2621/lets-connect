@@ -423,48 +423,88 @@ function enhancedListenToCallEvents(callId) {
     }).subscribe();
 }
 
+/* 🔧 FIXED: handleIncomingCall – proper offer-first, then bind local tracks */
 async function handleIncomingCall(row) {
   currentCallId = row.call_id;
   currentRemoteUser = row.from_user;
-  enhancedListenToCallEvents(currentCallId);
 
+  // Create PC first, then subscribe for ICE/answer
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
+  enhancedListenToCallEvents(currentCallId);
 
+  // Parse offer
   let offerPayload = row.payload;
-  if (typeof offerPayload === 'string') { try { offerPayload = JSON.parse(offerPayload); } catch(e){} }
-  const offerHasVideo = !!(offerPayload && offerPayload.sdp && offerPayload.sdp.includes('\nm=video'));
-
-  // Mirror transceivers
-  const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-  const videoTransceiver = offerHasVideo ? pc.addTransceiver('video', { direction: 'sendrecv' }) : null;
+  if (typeof offerPayload === 'string') {
+    try { offerPayload = JSON.parse(offerPayload); } catch (e) {}
+  }
+  const offerDesc = new RTCSessionDescription(offerPayload);
+  const offerHasVideo = !!(offerDesc.sdp && offerDesc.sdp.includes('\nm=video'));
 
   try {
-    // Add local tracks BEFORE answering, and bind with replaceTrack
+    // Apply remote offer FIRST so transceivers are created correctly
+    await pc.setRemoteDescription(offerDesc);
+    // If any ICE arrived early (while remoteDescription was null), apply them now
+    await processIceQueue();
+  } catch (err) {
+    console.warn('SET REMOTE DESC (offer) ERROR:', err);
+    alert('Failed to accept call (remote description error).');
+    cleanupCallResources();
+    return;
+  }
+
+  // Get local mic/cam
+  try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: offerHasVideo });
 
     const localEl = get('localVideo');
-    if (localEl) { localEl.srcObject = localStream; localEl.muted = true; localEl.autoplay = true; localEl.playsInline = true; }
+    if (localEl) {
+      localEl.srcObject = localStream;
+      localEl.muted = true;
+      localEl.autoplay = true;
+      localEl.playsInline = true;
+    }
+  } catch (err) {
+    alert('Camera/Mic blocked!');
+    cleanupCallResources();
+    return;
+  }
+
+  // Make sure remote video container exists
+  createRemoteVideoElement();
+
+  // Bind our local tracks to the EXISTING transceivers from the offer
+  try {
+    const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+    const audioTransceiver = transceivers.find(t => t.receiver && t.receiver.track && t.receiver.track.kind === 'audio');
+    const videoTransceiver = transceivers.find(t => t.receiver && t.receiver.track && t.receiver.track.kind === 'video');
 
     const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack && audioTransceiver?.sender) await audioTransceiver.sender.replaceTrack(audioTrack);
+    if (audioTrack && audioTransceiver && audioTransceiver.sender) {
+      await audioTransceiver.sender.replaceTrack(audioTrack);
+    }
 
     if (offerHasVideo) {
       const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack && videoTransceiver?.sender) await videoTransceiver.sender.replaceTrack(videoTrack);
+      if (videoTrack && videoTransceiver && videoTransceiver.sender) {
+        await videoTransceiver.sender.replaceTrack(videoTrack);
+      }
     }
   } catch (err) {
-    return alert('Camera/Mic blocked!');
+    console.warn('ERROR binding local tracks to transceivers:', err);
   }
 
-  createRemoteVideoElement();
-
+  // Create and send answer
   try {
-    await pc.setRemoteDescription(new RTCSessionDescription(offerPayload));
-    processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    const { error } = await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
+    const { error } = await supabase.from('calls').insert([{
+      call_id: currentCallId,
+      from_user: currentUser.id,
+      to_user: currentRemoteUser,
+      type: 'answer',
+      payload: JSON.stringify(answer)
+    }]);
     if (error) console.error('Answer insert error:', error.message);
     stopRinging();
   } catch (err) {
