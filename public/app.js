@@ -339,6 +339,9 @@ function setupPCListeners() {
       remoteEl.srcObject = remoteStream;
     }
     remoteEl.onloadedmetadata = () => remoteEl.play().catch(()=>{});
+    // When remote stream arrives, remove "Calling..." UI
+const o = get('outgoingCallUI');
+if (o) o.remove();
   };
 
   pc.onicecandidate = async (e) => {
@@ -402,6 +405,7 @@ function enhancedListenToCallEvents(callId) {
       }
     }).subscribe();
 }
+
 
 
 function subscribeToGlobalEvents() {
