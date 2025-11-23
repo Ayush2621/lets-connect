@@ -1,3 +1,4 @@
+
 'use strict';
 
 /*
@@ -216,12 +217,80 @@ function renderContacts(filter = '') {
   });
 }
 async function saveNewContact() {
-  const phone = getVal('addContactPhone'); const name = getVal('addContactName');
-  if (!phone) return alert('Phone required');
-  const { data: user } = await supabase.from('profiles').select('*').eq('phone', phone).maybeSingle();
-  const newContact = { owner: currentUser.id, phone, name: name || (user ? user.username : phone), contact_user: user ? user.id : null };
-  await supabase.from('contacts').insert([newContact]);
-  hide(get('modalAddContact')); loadContacts();
+  const rawPhone = getVal('addContactPhone');
+  let name = getVal('addContactName') || '';
+  if (!rawPhone) return alert('Phone required');
+
+  // Normalize helper: remove non-digits, keep leading + if present
+  function normalize(p) {
+    if (!p) return '';
+    p = p.toString().trim();
+    const plus = p.startsWith('+') ? '+' : '';
+    const digits = p.replace(/[^\d]/g, '');
+    return plus + digits;
+  }
+
+  const cleaned = normalize(rawPhone);
+  const withoutPlus = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+
+  console.log('[add contact] rawPhone:', rawPhone, 'cleaned:', cleaned, 'noPlus:', withoutPlus);
+
+  let userProfile = null;
+  let responses = [];
+
+  try {
+    let res = await supabase.from('profiles').select('*').eq('phone', cleaned).maybeSingle();
+    responses.push({ type: 'eq cleaned', res });
+    if (res?.data) userProfile = res.data;
+  } catch(e) { console.warn('eq cleaned error', e); }
+
+  if (!userProfile) {
+    try {
+      let res = await supabase.from('profiles').select('*').eq('phone', withoutPlus).maybeSingle();
+      responses.push({ type: 'eq noPlus', res });
+      if (res?.data) userProfile = res.data;
+    } catch(e) { console.warn('eq noPlus error', e); }
+  }
+
+  if (!userProfile) {
+    try {
+      const pattern = `%${withoutPlus}%`;
+      let res = await supabase.from('profiles').select('*').ilike('phone', pattern).limit(1);
+      responses.push({ type: 'ilike', res });
+      if (res?.data && res.data.length) userProfile = res.data[0];
+    } catch(e) { console.warn('ilike error', e); }
+  }
+
+  if (!userProfile && !name) {
+    try {
+      const res = await supabase.from('profiles').select('*').ilike('username', `%${rawPhone}%`).limit(1);
+      responses.push({ type: 'ilike username', res });
+      if (res?.data && res.data.length) userProfile = res.data[0];
+    } catch(e){ console.warn('ilike username err', e); }
+  }
+
+  if (!userProfile) {
+    console.log('[add contact] lookup attempts:', responses);
+    return alert('User not registered');
+  }
+
+  if (!name) name = userProfile.username || cleaned;
+
+  const newContact = {
+    owner: currentUser.id,
+    phone: rawPhone,
+    name,
+    contact_user: userProfile.id
+  };
+
+  const { error } = await supabase.from('contacts').insert([newContact]);
+  if (error) {
+    console.error('Failed to add contact:', error);
+    alert('Failed to add contact');
+  } else {
+    hide(get('modalAddContact'));
+    loadContacts();
+  }
 }
 
 /* Chat */
@@ -403,7 +472,7 @@ function enhancedListenToCallEvents(callId) {
       if (!row || row.from_user === currentUser.id) return;
 
       let payload = row.payload;
-      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch(e){} }
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (e){} }
 
       if (row.type === 'answer' && pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
