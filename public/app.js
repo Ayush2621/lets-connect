@@ -2,12 +2,13 @@
 
 /*
   FINAL CLEAN VERSION (Fully updated)
-  - Incoming Call Subscription FIXED (subscribeToGlobalEvents added).
-  - SDP m-line order FIXED (conditional transceivers + ordered tracks).
+  - Incoming call subscription fixed (subscribeToGlobalEvents added).
+  - SDP m-line order fixed (conditional transceivers + ordered tracks).
   - Caller UI transitions to Connected and removes "Calling…" on remote media.
-  - Video Z-Index FIXED (Video stays on top).
+  - Ringtone stops on accept and once connected (both sides).
+  - Audio clarity improved (remote element unmuted; local preview muted).
+  - Video Z-Index fixed (Video stays on top).
   - Ringtone path corrected to /ringtone.mp3.
-  - Duplicated bindings cleaned.
 */
 
 const supabase = window.supabase;
@@ -156,7 +157,7 @@ async function loadUserProfile() {
        if (url) get('meAvatar').innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
     }
     loadContacts();
-    subscribeToGlobalEvents(); // ensure callee gets incoming call popup + sound + vibration
+    subscribeToGlobalEvents(); // incoming call listener
     registerPush();
     startPresence();
     handleUrlParams();
@@ -295,7 +296,7 @@ async function startCallAction(video) {
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
-      localEl.muted = true;
+      localEl.muted = true;         // local preview muted
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
@@ -335,11 +336,13 @@ function setupPCListeners() {
       remoteStream.addTrack(e.track);
       remoteEl.srcObject = remoteStream;
     }
+    remoteEl.muted = false;          // ensure remote audio plays
     remoteEl.onloadedmetadata = () => remoteEl.play().catch(()=>{});
 
-    // When remote stream arrives, remove "Calling..." UI
+    // When remote stream arrives, remove "Calling..." UI and stop any ringtone
     const o = get('outgoingCallUI');
     if (o) o.remove();
+    stopRinging();
   };
 
   pc.onicecandidate = async (e) => {
@@ -376,6 +379,7 @@ function enhancedListenToCallEvents(callId) {
 
       if (row.type === 'answer' && pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
+        stopRinging(); // stop ringtone on caller when connected
         processIceQueue();
 
         // Update outgoing UI to "Connected"
@@ -428,7 +432,7 @@ async function handleIncomingCall(row) {
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
-      localEl.muted = true;
+      localEl.muted = true;         // local preview muted
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
@@ -443,7 +447,9 @@ async function handleIncomingCall(row) {
 
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(offerPayload));
+    stopRinging(); // stop ringtone immediately after accepting and applying offer
     processIceQueue();
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await supabase.from('calls').insert([{
@@ -487,6 +493,7 @@ function createRemoteVideoElement() {
   v.id = 'remoteVideo';
   v.autoplay = true;
   v.playsInline = true; 
+  v.muted = false; // remote audio should play
   // Force Z-Index High
   v.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;background:#000;object-fit:cover;";
   document.body.appendChild(v);
@@ -529,7 +536,7 @@ function ensureRingtone() {
   ringtone.src = "/ringtone.mp3"; // ensure this exists in your public root
   ringtone.loop = true;
 }
-function stopRinging() { if (ringtone) { ringtone.pause(); ringtone.currentTime = 0; } }
+function stopRinging() { if (ringtone) { try { ringtone.pause(); } catch(e){} ringtone.currentTime = 0; } }
 
 function showIncomingCallPopup(row) {
   if (get('incomingCallModal')) return;
