@@ -289,6 +289,9 @@ async function startCallAction(video) {
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
+// Pre‑declare transceivers to fix m‑line order
+pc.addTransceiver('audio', { direction: 'sendrecv' });
+pc.addTransceiver('video', { direction: 'sendrecv' });
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: !!video, audio: true });
@@ -299,7 +302,9 @@ async function startCallAction(video) {
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+   // Always add audio first, then video
+localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked! Check browser permissions.");
   }
@@ -419,6 +424,10 @@ async function handleIncomingCall(row) {
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
+  // Pre‑declare transceivers to fix m‑line order
+pc.addTransceiver('audio', { direction: 'sendrecv' });
+pc.addTransceiver('video', { direction: 'sendrecv' });
+
 
   let offerPayload = row.payload;
   if (typeof offerPayload === 'string') try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
@@ -432,7 +441,10 @@ async function handleIncomingCall(row) {
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    // Always add audio first, then video
+localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
+
   } catch (err) {
     return alert("Camera/Mic blocked!");
   }
