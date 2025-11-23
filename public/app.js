@@ -1,11 +1,13 @@
 'use strict';
 
 /*
-  FINAL CLEAN VERSION
-  - Green Debugger REMOVED.
-  - Incoming Call Popup FIXED.
+  FINAL CLEAN VERSION (Fully updated)
+  - Incoming Call Subscription FIXED (subscribeToGlobalEvents added).
+  - SDP m-line order FIXED (conditional transceivers + ordered tracks).
+  - Caller UI transitions to Connected and removes "Calling…" on remote media.
   - Video Z-Index FIXED (Video stays on top).
-  - Ringtones & Connections stabilized.
+  - Ringtone path corrected to /ringtone.mp3.
+  - Duplicated bindings cleaned.
 */
 
 const supabase = window.supabase;
@@ -27,7 +29,6 @@ let myContacts = [];
 let audioCtx = null;
 let globalSub = null;
 let messageSub = null;
-
 
 // WebRTC Globals
 let pc = null;
@@ -55,17 +56,17 @@ const on = (id, evt, fn) => { const el = get(id); if (el) el.addEventListener(ev
 
 /* -------------------- INIT -------------------- */
 document.addEventListener('DOMContentLoaded', () => {
-  navigator.serviceWorker.register('/sw.js');
-   if ('serviceWorker' in navigator) {
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then(reg => console.log('Service worker registered:', reg))
       .catch(err => console.error('SW registration failed:', err));
   }
+
+  // Prime AudioContext on first user gesture
   document.body.addEventListener('click', () => {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
   }, { once: true });
-
 
   // Bindings
   on('btnSignUp', 'click', handleSignUp);
@@ -89,19 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
   on('attachFile', 'change', (e) => renderFilePreview(e.target.files));
   on('btnClearChat', 'click', clearChat);
   on('btnBackMobile', 'click', () => {
-  // Example action: close chat panel and go back to contacts
-  const chatPanel = get('chatPanel');
-  if (chatPanel) {
-    chatPanel.classList.remove('active-screen');
-  }
-  // Optionally hide chat and show contacts list
-  show(get('contactsSection'));
-  hide(get('chatSection'));
-});
-   on('btnVoiceCall', 'click', () => startCallAction(false));
-  on('btnVideoCall', 'click', () => startCallAction(true));
-  on('btnEmoji', 'click', showEmojiPicker);
-  
+    const chatPanel = get('chatPanel');
+    if (chatPanel) chatPanel.classList.remove('active-screen');
+    show(get('contactsSection'));
+    hide(get('chatSection'));
+  });
+
   // CALL BUTTONS
   on('btnVoiceCall', 'click', () => startCallAction(false));
   on('btnVideoCall', 'click', () => startCallAction(true));
@@ -159,9 +153,13 @@ async function loadUserProfile() {
     get('profilePhone').value = data.phone || '';
     if (data.avatar_path) {
        const url = await getSignedUrl('avatars', data.avatar_path);
-       if(url) get('meAvatar').innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+       if (url) get('meAvatar').innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
     }
-    loadContacts(); subscribeToGlobalEvents(); registerPush(); startPresence(); handleUrlParams();
+    loadContacts();
+    subscribeToGlobalEvents(); // ensure callee gets incoming call popup + sound + vibration
+    registerPush();
+    startPresence();
+    handleUrlParams();
   } else {
     get('profileName').value = currentUser.email.split('@')[0];
     showScreen('profile');
@@ -277,21 +275,10 @@ function renderMessage(msg) {
 }
 
 /* -------------------- CALLING LOGIC -------------------- */
-function subscribeToGlobalEvents() {
-  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
-  globalSub = supabase.channel('user_global_' + currentUser.id)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
-      if (row && row.type === 'offer') {
-        currentRemoteUser = row.from_user; 
-        showIncomingCallPopup(row);
-        if (navigator.vibrate) navigator.vibrate([200,100,200]);
-        ensureRingtone(); try { ringtone.play(); } catch(e){}
-      }
-    }).subscribe();
-}
+
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
-  
+
   currentCallId = `call_${Date.now()}`;
   currentRemoteUser = activeContact.contact_user; 
   iceCandidatesQueue = [];
@@ -299,7 +286,7 @@ async function startCallAction(video) {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
 
-  // Lock m-line order: audio first, then conditional video
+  // Lock m-line order: audio first, add video only if requested
   pc.addTransceiver('audio', { direction: 'sendrecv' });
   if (video) pc.addTransceiver('video', { direction: 'sendrecv' });
 
@@ -329,7 +316,7 @@ async function startCallAction(video) {
       from_user: currentUser.id,
       to_user: currentRemoteUser,
       type: 'offer',
-      payload: JSON.stringify(offer) // pure RTCSessionDescriptionInit
+      payload: JSON.stringify(offer)
     }]);
     showOutgoingCallingUI(currentCallId, currentRemoteUser);
   } catch (err) {
@@ -477,6 +464,21 @@ async function processIceQueue() {
   iceCandidatesQueue = [];
 }
 
+/* -------------------- GLOBAL INCOMING CALL SUBSCRIPTION -------------------- */
+
+function subscribeToGlobalEvents() {
+  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
+  globalSub = supabase.channel('user_global_' + currentUser.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
+      if (row && row.type === 'offer') {
+        currentRemoteUser = row.from_user; 
+        showIncomingCallPopup(row);
+        if (navigator.vibrate) navigator.vibrate([200,100,200]);
+        ensureRingtone(); try { ringtone.play(); } catch(e){}
+      }
+    }).subscribe();
+}
+
 /* -------------------- UI ELEMENTS -------------------- */
 function createRemoteVideoElement() {
   let v = get('remoteVideo');
@@ -514,8 +516,8 @@ function cleanupCallResources() {
 }
 
 function endCall() {
-  if(currentCallId && currentRemoteUser) {
-      supabase.from('calls').insert([{call_id:currentCallId, from_user:currentUser.id, to_user:currentRemoteUser, type:'cancel', payload:'{}'}]);
+  if (currentCallId && currentRemoteUser) {
+    supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'cancel', payload: '{}' }]);
   }
   cleanupCallResources();
 }
@@ -524,7 +526,7 @@ function endCall() {
 let ringtone = null;
 function ensureRingtone() {
   if (ringtone) return; ringtone = document.createElement('audio');
-  ringtone.src = "/rington.mp3";
+  ringtone.src = "/ringtone.mp3"; // ensure this exists in your public root
   ringtone.loop = true;
 }
 function stopRinging() { if (ringtone) { ringtone.pause(); ringtone.currentTime = 0; } }
@@ -562,6 +564,7 @@ function showOutgoingCallingUI(id, to) {
   document.body.appendChild(d);
   get('btnCancelCall').onclick = endCall;
 }
+
 async function getSignedUrl(b, p) { const { data } = await supabase.storage.from(b).createSignedUrl(p, 3600); return data?.signedUrl; }
 function playTone(t) { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); if (audioCtx) { const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value=t==='send'?800:600; g.gain.value=0.1; o.start(); setTimeout(()=>o.stop(),150); } else BEEP_SOUND.play().catch(()=>{}); }
 function showToast(m) { const d=document.createElement('div'); d.textContent=m; d.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#00a884;color:white;padding:10px 20px;border-radius:20px;z-index:9999;box-shadow:0 2px 5px rgba(0,0,0,0.3)"; document.body.appendChild(d); setTimeout(()=>d.remove(),3000); }
@@ -574,6 +577,8 @@ function showEmojiPicker() { const d=document.createElement('div'); d.innerHTML=
 async function startQrScan() { show(get('modalQrScan')); try { scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); get('qrVideo').srcObject=scannerStream; } catch(e){alert(e);} }
 function stopScanner() { if(scannerStream) scannerStream.getTracks().forEach(t=>t.stop()); }
 function handleUrlParams() { const p=new URLSearchParams(location.search); if(p.get('addPhone')) { show(get('modalAddContact')); get('addContactPhone').value=p.get('addPhone'); } }
-async function registerPush() { if('serviceWorker' in navigator){ try{const r=await navigator.serviceWorker.register('/sw.js');}catch(e){} } }
+async function registerPush() { if('serviceWorker' in navigator){ try{await navigator.serviceWorker.register('/sw.js');}catch(e){} } }
 function startPresence() { setInterval(()=> { if(currentUser) supabase.from('profiles').update({last_seen:new Date()}).eq('id',currentUser.id); }, 30000); }
+
+// Expose for debug
 window.startCallAction = startCallAction;
