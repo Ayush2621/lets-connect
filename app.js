@@ -388,11 +388,13 @@ function setupPCListeners() {
   };
 
   pc.onconnectionstatechange = () => {
-    const st = pc.connectionState;
-    if (st === 'failed' || st === 'closed' || st === 'disconnected') {
-      cleanupCallResources();
-    }
-  };
+  if (!pc) return; // prevent null access
+  const st = pc.connectionState;
+  if (st === 'failed' || st === 'closed' || st === 'disconnected') {
+    cleanupCallResources();
+  }
+};
+
 }
 function enhancedListenToCallEvents(callId) {
   if (callsChannel) { try { callsChannel.unsubscribe(); } catch(e){} }
