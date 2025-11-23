@@ -78,6 +78,18 @@ document.addEventListener('DOMContentLoaded', () => {
   on('btnAttachMain', 'click', () => get('attachFile').click());
   on('attachFile', 'change', (e) => renderFilePreview(e.target.files));
   on('btnClearChat', 'click', clearChat);
+  on('btnBackMobile', 'click', () => {
+  // Example action: close chat panel and go back to contacts
+  const chatPanel = get('chatPanel');
+  if (chatPanel) {
+    chatPanel.classList.remove('active-screen');
+  }
+  // Optionally hide chat and show contacts list
+  show(get('contactsSection'));
+  hide(get('chatSection'));
+});
+   on('btnVoiceCall', 'click', () => startCallAction(false));
+  on('btnVideoCall', 'click', () => startCallAction(true));
   on('btnEmoji', 'click', showEmojiPicker);
   
   // CALL BUTTONS
@@ -256,6 +268,7 @@ function renderMessage(msg) {
 
 /* -------------------- CALLING LOGIC -------------------- */
 
+
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
   
@@ -267,14 +280,15 @@ async function startCallAction(video) {
   setupPCListeners();
 
   try {
-    console.log("Requesting User Media...");
     localStream = await navigator.mediaDevices.getUserMedia({ video: !!video, audio: true });
-    
-    // Preview
-    const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true;
-    v.srcObject = localStream; v.style.width = '40px'; v.style.height = '40px'; v.style.objectFit = 'cover';
-    if (get('chatAvatar')) { get('chatAvatar').innerHTML = ''; get('chatAvatar').appendChild(v); }
-    
+    // Attach local preview
+    const localEl = get('localVideo');
+    if (localEl) {
+      localEl.srcObject = localStream;
+      localEl.muted = true;
+      localEl.autoplay = true;
+      localEl.playsInline = true;
+    }
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked! Check browser permissions.");
@@ -285,8 +299,13 @@ async function startCallAction(video) {
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.log("Sending OFFER...");
-    await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'offer', payload: JSON.stringify(offer) }]);
+    await supabase.from('calls').insert([{ 
+      call_id: currentCallId, 
+      from_user: currentUser.id, 
+      to_user: currentRemoteUser, 
+      type: 'offer', 
+      payload: JSON.stringify(offer) 
+    }]);
     showOutgoingCallingUI(currentCallId, currentRemoteUser);
   } catch (err) {
     console.warn("OFFER ERROR:", err);
@@ -295,39 +314,30 @@ async function startCallAction(video) {
 }
 
 function setupPCListeners() {
-  pc.oniceconnectionstatechange = () => console.log(`ICE State: ${pc.iceConnectionState}`);
-  pc.onconnectionstatechange = () => console.log(`Conn State: ${pc.connectionState}`);
-
   pc.ontrack = (e) => {
-    console.log(`TRACK RECEIVED: ${e.track.kind}`);
     const remoteEl = get('remoteVideo') || createRemoteVideoElement();
-    
     if (e.streams && e.streams[0]) {
-        if (remoteEl.srcObject !== e.streams[0]) remoteEl.srcObject = e.streams[0];
+      remoteEl.srcObject = e.streams[0];
     } else {
-        if (!remoteStream) remoteStream = new MediaStream();
-        remoteStream.addTrack(e.track);
-        if (remoteEl.srcObject !== remoteStream) remoteEl.srcObject = remoteStream;
+      if (!remoteStream) remoteStream = new MediaStream();
+      remoteStream.addTrack(e.track);
+      remoteEl.srcObject = remoteStream;
     }
-    
-    // Force play (iOS fix)
     remoteEl.onloadedmetadata = () => {
-        remoteEl.play().catch(e => console.log("Autoplay blocked"));
+      remoteEl.play().catch(() => console.log("Autoplay blocked"));
     };
   };
 
   pc.onicecandidate = async (e) => {
     if (!e.candidate || !currentRemoteUser) return;
-    try {
-       const candidateJSON = e.candidate.toJSON();
-       await supabase.from('calls').insert([{
-          call_id: currentCallId,
-          from_user: currentUser.id,
-          to_user: currentRemoteUser,
-          type: 'ice',
-          payload: JSON.stringify(candidateJSON)
-       }]);
-    } catch (err) { console.warn("ICE SEND FAIL:", err); }
+    const candidateJSON = e.candidate.toJSON();
+    await supabase.from('calls').insert([{
+      call_id: currentCallId,
+      from_user: currentUser.id,
+      to_user: currentRemoteUser,
+      type: 'ice',
+      payload: JSON.stringify(candidateJSON)
+    }]);
   };
 }
 
@@ -338,66 +348,26 @@ function enhancedListenToCallEvents(callId) {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
       if (!row || row.from_user === currentUser.id) return;
 
-      if (row.type === 'cancel' || row.type === 'reject') { cleanupCallResources(); return; }
-      if (row.type === 'offer') return; // Offers handled globally
-
       let payload = row.payload;
       if (typeof payload === 'string') try { payload = JSON.parse(payload); } catch(e) {}
 
-      try {
-        if (row.type === 'answer' && pc) {
-          console.log("ANSWER Received.");
-          await pc.setRemoteDescription(new RTCSessionDescription(payload));
-          processIceQueue();
-        } else if (row.type === 'ice' && pc) {
-          // Sanitized ICE Candidate Handling
-          if (payload && payload.candidate) {
-             const candidateInit = {
-                 candidate: payload.candidate,
-                 sdpMid: payload.sdpMid,
-                 sdpMLineIndex: payload.sdpMLineIndex
-             };
-             const ice = new RTCIceCandidate(candidateInit);
-             
-             if (pc.remoteDescription && pc.remoteDescription.type) {
-                await pc.addIceCandidate(ice);
-             } else {
-                iceCandidatesQueue.push(ice);
-             }
-          }
+      if (row.type === 'answer' && pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(payload));
+        processIceQueue();
+      } else if (row.type === 'ice' && pc) {
+        const ice = new RTCIceCandidate(payload);
+        if (pc.remoteDescription) {
+          await pc.addIceCandidate(ice);
+        } else {
+          iceCandidatesQueue.push(ice);
         }
-      } catch (e) { console.warn("SIGNAL ERROR:", e); }
-    }).subscribe();
-}
-
-async function processIceQueue() {
-    if (!pc) return;
-    for (const c of iceCandidatesQueue) await pc.addIceCandidate(c);
-    iceCandidatesQueue = [];
-}
-
-function subscribeToGlobalEvents() {
-  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
-  console.log("Subscribing to global calls for:", currentUser.id);
-  
-  globalSub = supabase.channel('user_global_' + currentUser.id)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
-      if (row && row.type === 'offer') {
-          console.log(`Incoming Call from ${row.from_user}`);
-          currentRemoteUser = row.from_user; 
-          showIncomingCallPopup(row);
       }
-    })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-      if (payload.new.from_user !== currentUser.id) { showToast('New Message'); playTone('receive'); }
     }).subscribe();
 }
 
 async function handleIncomingCall(row) {
-  playTone('receive');
   currentCallId = row.call_id;
   currentRemoteUser = row.from_user; 
-  
   enhancedListenToCallEvents(currentCallId);
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -405,14 +375,21 @@ async function handleIncomingCall(row) {
 
   let offerPayload = row.payload;
   if (typeof offerPayload === 'string') try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
-  
+
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const localEl = get('localVideo');
+    if (localEl) {
+      localEl.srcObject = localStream;
+      localEl.muted = true;
+      localEl.autoplay = true;
+      localEl.playsInline = true;
+    }
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked!");
   }
-  
+
   createRemoteVideoElement();
 
   try {
@@ -420,11 +397,22 @@ async function handleIncomingCall(row) {
     processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    console.log("Sending ANSWER...");
-    await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
+    await supabase.from('calls').insert([{ 
+      call_id: currentCallId, 
+      from_user: currentUser.id, 
+      to_user: currentRemoteUser, 
+      type: 'answer', 
+      payload: JSON.stringify(answer) 
+    }]);
   } catch (err) {
-     console.warn("ANSWER ERROR:", err);
+    console.warn("ANSWER ERROR:", err);
   }
+}
+
+async function processIceQueue() {
+  if (!pc) return;
+  for (const c of iceCandidatesQueue) await pc.addIceCandidate(c);
+  iceCandidatesQueue = [];
 }
 
 /* -------------------- UI ELEMENTS -------------------- */
