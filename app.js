@@ -25,6 +25,9 @@ let myProfile = null;
 let activeContact = null;
 let myContacts = [];
 let audioCtx = null;
+let globalSub = null;
+let messageSub = null;
+
 
 // WebRTC Globals
 let pc = null;
@@ -513,7 +516,10 @@ function showOutgoingCallingUI(id, to) {
   document.body.appendChild(d);
   get('btnCancelCall').onclick = endCall;
 }
-
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(reg => console.log('Service worker registered:', reg))
+    .catch(err => console.error('SW registration failed:', err));}
 async function getSignedUrl(b, p) { const { data } = await supabase.storage.from(b).createSignedUrl(p, 3600); return data?.signedUrl; }
 function playTone(t) { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); if (audioCtx) { const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value=t==='send'?800:600; g.gain.value=0.1; o.start(); setTimeout(()=>o.stop(),150); } else BEEP_SOUND.play().catch(()=>{}); }
 function showToast(m) { const d=document.createElement('div'); d.textContent=m; d.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#00a884;color:white;padding:10px 20px;border-radius:20px;z-index:9999;box-shadow:0 2px 5px rgba(0,0,0,0.3)"; document.body.appendChild(d); setTimeout(()=>d.remove(),3000); }
