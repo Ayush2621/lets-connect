@@ -3,24 +3,12 @@
 /*
   COMPLETE app.js (IDs preserved, two-way calls fixed, caller UI updates)
   - Uses your TURN credentials (ExpressTURN) to avoid one-way media behind NAT/mobile.
-  - Caller and callee add tracks BEFORE offer/answer; transceivers mirrored (audio first, optional video).
-  - Caller UI changes from "Calling..." to "Connected" immediately upon receiving the callee's answer.
-  - Ringtone starts on ringing; stops on accept, remote media, or end/cancel.
-  - Messaging: Enter key + send button; attachments upload; emoji picker works.
-  - Defensive element checks so bindings don't break if an element is temporarily missing.
+  - Caller and callee bind local tracks to transceivers BEFORE offer/answer (replaceTrack), mirroring audio/video.
+  - Caller UI changes from "Calling..." to "Connected" when remote media or answer is applied.
+  - Ringtone starts on ringing; stops on accept/media/end.
+  - Messaging: Enter key + send button; attachments upload; emoji picker.
+  - Defensive checks to avoid null access and console errors.
   - Realtime subscriptions for calls and messages.
-  - Required HTML IDs listed in comments below.
-*/
-
-/* REQUIRED HTML IDs:
-Sections: authSection, profileSection, appSection, contactsSection, chatSection, chatPanel
-Auth: btnSignIn, btnSignUp, btnDemo, tabSignIn, tabSignUp, formSignIn, formSignUp, signinEmail, signinPass, signupEmail, signupPass
-Profile: profileName, profilePhone, profileAvatar, btnSaveProfile, btnSkipProfile, meName, mePhone, meAvatar, btnOpenProfile, avatarPreview
-Contacts: btnAddContactMain, modalAddContact, addContactPhone, addContactName, addContactSave, addContactCancel, contactSearch, btnRefresh, contactsList
-Chat: chatTitle, chatSubtitle, chatAvatar, messages, inputMessage, btnSendMain, btnAttachMain, attachFile, filePreview, btnClearChat, btnBackMobile, btnEmoji
-Calls: btnVoiceCall, btnVideoCall, localVideo
-QR: btnShowQr, qrImage, qrClose, btnScanQr, modalQrScan, qrVideo, qrScanClose, modalQr
-Runtime-created: incomingCallModal, outgoingCallUI, callStatusText, remoteVideo, endCallBtn
 */
 
 const supabase = window.supabase;
@@ -74,7 +62,6 @@ function on(id, evt, fn) { const el = get(id); if (el) el.addEventListener(evt, 
 document.addEventListener('DOMContentLoaded', () => {
   if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 
-  
   // Prime audio context
   document.body.addEventListener('click', () => {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -131,7 +118,6 @@ function openProfileScreen() {
   }
   showScreen('profile');
 }
-
 
 /* Auth and profile */
 async function checkSession() {
@@ -340,7 +326,7 @@ async function startCallAction(video) {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
 
-  // Stabilize m-line order: create transceivers first (audio, optional video)
+  // Create transceivers first to stabilize m-line order
   const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
   const videoTransceiver = video ? pc.addTransceiver('video', { direction: 'sendrecv' }) : null;
 
@@ -367,7 +353,8 @@ async function startCallAction(video) {
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'offer', payload: JSON.stringify(offer) }]);
+    const { error } = await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'offer', payload: JSON.stringify(offer) }]);
+    if (error) console.error('Offer insert error:', error.message);
     showOutgoingCallingUI();
   } catch (err) {
     console.warn('OFFER ERROR:', err);
@@ -395,7 +382,8 @@ function setupPCListeners() {
 
   pc.onicecandidate = async (e) => {
     if (!e.candidate || !currentRemoteUser) return;
-    await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'ice', payload: JSON.stringify(e.candidate.toJSON()) }]);
+    const { error } = await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'ice', payload: JSON.stringify(e.candidate.toJSON()) }]);
+    if (error) console.error('ICE insert error:', error.message);
   };
 
   pc.onconnectionstatechange = () => {
@@ -409,7 +397,7 @@ function setupPCListeners() {
 }
 
 function enhancedListenToCallEvents(callId) {
-  if (callsChannel) { try { callsChannel.unsubscribe(); } catch(e){} }
+  try { callsChannel?.unsubscribe(); } catch(e){}
   callsChannel = supabase.channel('call_' + callId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
       if (!row || row.from_user === currentUser.id) return;
@@ -476,7 +464,8 @@ async function handleIncomingCall(row) {
     processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
+    const { error } = await supabase.from('calls').insert([{ call_id: currentCallId, from_user: currentUser.id, to_user: currentRemoteUser, type: 'answer', payload: JSON.stringify(answer) }]);
+    if (error) console.error('Answer insert error:', error.message);
     stopRinging();
   } catch (err) {
     console.warn('ANSWER ERROR:', err);
@@ -490,7 +479,6 @@ async function processIceQueue() {
 }
 
 /* Call UI + teardown */
-
 function showIncomingCallPopup(row) {
   if (get('incomingCallModal')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
@@ -508,7 +496,6 @@ function showIncomingCallPopup(row) {
   const a = get('btnAccept'); if (a) a.onclick = () => { stopRinging(); modal.remove(); handleIncomingCall(row); };
   const d = get('btnDecline'); if (d) d.onclick = () => { stopRinging(); modal.remove(); };
 }
-
 function showOutgoingCallingUI() {
   if (get('outgoingCallUI')) return;
   ensureRingtone(); try { ringtone.play(); } catch(e){}
@@ -520,13 +507,11 @@ function showOutgoingCallingUI() {
   document.body.appendChild(wrap);
   get('btnCancelCall')?.addEventListener('click', endCall);
 }
-
 function updateOutgoingUIConnected() {
   const status = document.getElementById('callStatusText');
   if (status) status.textContent = 'Connected';
   stopRinging();
 }
-
 function createRemoteVideoElement() {
   let v = get('remoteVideo'); if (v) return v;
   v = document.createElement('video');
@@ -544,7 +529,18 @@ function createRemoteVideoElement() {
 
   return v;
 }
-
+function cleanupCallResources() {
+  try { pc?.close(); } catch(e){} pc = null;
+  try { localStream?.getTracks().forEach(t => t.stop()); } catch(e){} localStream = null;
+  try { remoteStream?.getTracks().forEach(t => t.stop()); } catch(e){} remoteStream = null;
+  try { callsChannel?.unsubscribe(); } catch(e){}
+  currentCallId = null; currentRemoteUser = null; iceCandidatesQueue = [];
+  get('remoteVideo')?.remove();
+  get('endCallBtn')?.remove();
+  get('outgoingCallUI')?.remove();
+  get('incomingCallModal')?.remove();
+  stopRinging();
+}
 async function endCall() {
   if (currentCallId && currentRemoteUser) {
     const { error } = await supabase
@@ -560,7 +556,6 @@ async function endCall() {
   }
   cleanupCallResources();
 }
-
 
 /* Ringtone, QR, misc */
 function ensureRingtone() {
