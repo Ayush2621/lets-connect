@@ -277,11 +277,18 @@ function renderMessage(msg) {
 }
 
 /* -------------------- CALLING LOGIC -------------------- */
-
-/* -------------------- CALLING LOGIC -------------------- */
-
-/* -------------------- CALLING LOGIC -------------------- */
-
+function subscribeToGlobalEvents() {
+  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
+  globalSub = supabase.channel('user_global_' + currentUser.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
+      if (row && row.type === 'offer') {
+        currentRemoteUser = row.from_user; 
+        showIncomingCallPopup(row);
+        if (navigator.vibrate) navigator.vibrate([200,100,200]);
+        ensureRingtone(); try { ringtone.play(); } catch(e){}
+      }
+    }).subscribe();
+}
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
   
@@ -292,12 +299,11 @@ async function startCallAction(video) {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
 
-  // Pre‑declare transceivers to lock m‑line order
+  // Lock m-line order: audio first, then conditional video
   pc.addTransceiver('audio', { direction: 'sendrecv' });
-  pc.addTransceiver('video', { direction: 'sendrecv' });
+  if (video) pc.addTransceiver('video', { direction: 'sendrecv' });
 
   try {
-    // Caller requests audio + video consistently
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !!video });
     const localEl = get('localVideo');
     if (localEl) {
@@ -306,9 +312,9 @@ async function startCallAction(video) {
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
-    // Always add audio first, then video
+    // Always add audio first, then video (only if requested)
     localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-    localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
+    if (video) localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked! Check browser permissions.");
   }
@@ -323,7 +329,7 @@ async function startCallAction(video) {
       from_user: currentUser.id,
       to_user: currentRemoteUser,
       type: 'offer',
-      payload: JSON.stringify(offer)
+      payload: JSON.stringify(offer) // pure RTCSessionDescriptionInit
     }]);
     showOutgoingCallingUI(currentCallId, currentRemoteUser);
   } catch (err) {
@@ -418,16 +424,20 @@ async function handleIncomingCall(row) {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   setupPCListeners();
 
-  // Pre‑declare transceivers to lock m‑line order
-  pc.addTransceiver('audio', { direction: 'sendrecv' });
-  pc.addTransceiver('video', { direction: 'sendrecv' });
-
+  // Parse the offer to detect whether it includes a video m-line
   let offerPayload = row.payload;
-  if (typeof offerPayload === 'string') try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
+  if (typeof offerPayload === 'string') {
+    try { offerPayload = JSON.parse(offerPayload); } catch(e) {}
+  }
+  const offerHasVideo = !!(offerPayload && offerPayload.sdp && offerPayload.sdp.includes('\nm=video'));
+
+  // Lock m-line order to match the offer: audio first, then video if present
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  if (offerHasVideo) pc.addTransceiver('video', { direction: 'sendrecv' });
 
   try {
-    // Callee requests audio + video consistently
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    // Callee requests the same media as the offer
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: offerHasVideo });
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
@@ -435,9 +445,9 @@ async function handleIncomingCall(row) {
       localEl.autoplay = true;
       localEl.playsInline = true;
     }
-    // Always add audio first, then video
+    // Always add audio first, then video (only if offer had video)
     localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
-    localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
+    if (offerHasVideo) localStream.getVideoTracks().forEach(track => pc.addTrack(track, localStream));
   } catch (err) {
     return alert("Camera/Mic blocked!");
   }
