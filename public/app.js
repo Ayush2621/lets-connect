@@ -350,17 +350,41 @@ function setupPCListeners() {
 }
 
 function enhancedListenToCallEvents(callId) {
-  if (callsChannel) { try { callsChannel.unsubscribe(); } catch(e) {} }
+  if (callsChannel) { 
+    try { callsChannel.unsubscribe(); } catch(e) {} 
+  }
   
   callsChannel = supabase.channel('call_' + callId)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
+    .on('postgres_changes', { 
+      event: 'INSERT', 
+      schema: 'public', 
+      table: 'calls', 
+      filter: `call_id=eq.${callId}` 
+    }, async ({ new: row }) => {
       if (!row || row.from_user === currentUser.id) return;
+
       let payload = row.payload;
-      if (typeof payload === 'string') try { payload = JSON.parse(payload); } catch(e) {}
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch(e) {}
+      }
 
       if (row.type === 'answer' && pc) {
+        // ✅ Set remote description when callee answers
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
         processIceQueue();
+
+        // ✅ Update outgoing UI from "Calling..." to "Connected"
+        const o = get('outgoingCallUI');
+        if (o) {
+          o.innerHTML = `<div style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+            background:#00a884;color:white;padding:15px 25px;border-radius:30px;z-index:20000;
+            display:flex;gap:15px;align-items:center;box-shadow:0 5px 15px rgba(0,0,0,0.5);">
+            <span style="font-weight:bold;">Connected</span> 
+            <button id="btnCancelCall" style="background:#ea0038;color:white;border:none;
+            padding:8px 15px;border-radius:15px;font-weight:bold;cursor:pointer;">End</button>
+          </div>`;
+          get('btnCancelCall').onclick = endCall;
+        }
       } else if (row.type === 'ice' && pc) {
         const ice = new RTCIceCandidate(payload);
         if (pc.remoteDescription) {
@@ -373,6 +397,7 @@ function enhancedListenToCallEvents(callId) {
       }
     }).subscribe();
 }
+
 
 function subscribeToGlobalEvents() {
   if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
@@ -485,7 +510,7 @@ function endCall() {
 let ringtone = null;
 function ensureRingtone() {
   if (ringtone) return; ringtone = document.createElement('audio');
-  ringtone.src = "public/rington.mp3";
+  ringtone.src = "/rington.mp3";
   ringtone.loop = true;
 }
 function stopRinging() { if (ringtone) { ringtone.pause(); ringtone.currentTime = 0; } }
