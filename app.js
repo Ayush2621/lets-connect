@@ -268,6 +268,7 @@ function renderMessage(msg) {
 
 /* -------------------- CALLING LOGIC -------------------- */
 
+/* -------------------- CALLING LOGIC -------------------- */
 
 async function startCallAction(video) {
   if (!activeContact || !activeContact.contact_user) return alert('Select a contact');
@@ -281,7 +282,6 @@ async function startCallAction(video) {
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: !!video, audio: true });
-    // Attach local preview
     const localEl = get('localVideo');
     if (localEl) {
       localEl.srcObject = localStream;
@@ -299,12 +299,12 @@ async function startCallAction(video) {
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await supabase.from('calls').insert([{ 
-      call_id: currentCallId, 
-      from_user: currentUser.id, 
-      to_user: currentRemoteUser, 
-      type: 'offer', 
-      payload: JSON.stringify(offer) 
+    await supabase.from('calls').insert([{
+      call_id: currentCallId,
+      from_user: currentUser.id,
+      to_user: currentRemoteUser,
+      type: 'offer',
+      payload: JSON.stringify(offer)
     }]);
     showOutgoingCallingUI(currentCallId, currentRemoteUser);
   } catch (err) {
@@ -323,9 +323,7 @@ function setupPCListeners() {
       remoteStream.addTrack(e.track);
       remoteEl.srcObject = remoteStream;
     }
-    remoteEl.onloadedmetadata = () => {
-      remoteEl.play().catch(() => console.log("Autoplay blocked"));
-    };
+    remoteEl.onloadedmetadata = () => remoteEl.play().catch(()=>{});
   };
 
   pc.onicecandidate = async (e) => {
@@ -347,7 +345,6 @@ function enhancedListenToCallEvents(callId) {
   callsChannel = supabase.channel('call_' + callId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `call_id=eq.${callId}` }, async ({ new: row }) => {
       if (!row || row.from_user === currentUser.id) return;
-
       let payload = row.payload;
       if (typeof payload === 'string') try { payload = JSON.parse(payload); } catch(e) {}
 
@@ -361,6 +358,21 @@ function enhancedListenToCallEvents(callId) {
         } else {
           iceCandidatesQueue.push(ice);
         }
+      } else if (row.type === 'cancel' || row.type === 'reject') {
+        cleanupCallResources();
+      }
+    }).subscribe();
+}
+
+function subscribeToGlobalEvents() {
+  if (globalSub) { try { globalSub.unsubscribe(); } catch(e) {} }
+  globalSub = supabase.channel('user_global_' + currentUser.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `to_user=eq.${currentUser.id}` }, async ({ new: row }) => {
+      if (row && row.type === 'offer') {
+        currentRemoteUser = row.from_user; 
+        showIncomingCallPopup(row);
+        if (navigator.vibrate) navigator.vibrate([200,100,200]);
+        ensureRingtone(); try { ringtone.play(); } catch(e){}
       }
     }).subscribe();
 }
@@ -397,12 +409,12 @@ async function handleIncomingCall(row) {
     processIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await supabase.from('calls').insert([{ 
-      call_id: currentCallId, 
-      from_user: currentUser.id, 
-      to_user: currentRemoteUser, 
-      type: 'answer', 
-      payload: JSON.stringify(answer) 
+    await supabase.from('calls').insert([{
+      call_id: currentCallId,
+      from_user: currentUser.id,
+      to_user: currentRemoteUser,
+      type: 'answer',
+      payload: JSON.stringify(answer)
     }]);
   } catch (err) {
     console.warn("ANSWER ERROR:", err);
@@ -414,6 +426,7 @@ async function processIceQueue() {
   for (const c of iceCandidatesQueue) await pc.addIceCandidate(c);
   iceCandidatesQueue = [];
 }
+
 
 /* -------------------- UI ELEMENTS -------------------- */
 function createRemoteVideoElement() {
